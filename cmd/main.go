@@ -5,32 +5,56 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
+
 	"github.com/GoldenFealla/image-processing-service/internal/application"
 	"github.com/GoldenFealla/image-processing-service/internal/infrastructure"
 	"github.com/GoldenFealla/image-processing-service/internal/presentation"
 )
 
 func main() {
-	imageRepo := infrastructure.NewInMemoryImageRepository()
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("error loading .env file")
+	}
 
-	// simple processor stays the same for now; you could replace it with a
-	// more advanced implementation later
-	processor := infrastructure.NewSimpleImageProcessor()
+	r2Config := &infrastructure.R2StorageConfig{
+		AccountID:       os.Getenv("R2_ACCOUNT_ID"),
+		AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
+		AccessKeySecret: os.Getenv("R2_SECRET_ACCESS_KEY"),
+		Bucket:          os.Getenv("R2_BUCKET"),
+		PublicURL:       os.Getenv("R2_PUBLIC_URL"),
+	}
 
-	// Application layer
-	processUseCase := application.NewProcessImageUseCase(imageRepo, processor)
+	pgConfig := &infrastructure.PostgresConfig{
+		Host:     os.Getenv("DB_HOST"),
+		Port:     os.Getenv("DB_PORT"),
+		User:     os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PASSWORD"),
+		DBName:   os.Getenv("DB_NAME"),
+	}
 
-	// Presentation layer
+	mainMux := http.NewServeMux()
+
+	// === infrastructure ===
+	metadataRepo, err := infrastructure.NewPostgresImageRepository(pgConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer metadataRepo.Close()
+	storageRepo, err := infrastructure.NewR2Storage(r2Config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// === application ======
+	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo)
+
+	// === presentation =====
 	imageHandler := presentation.NewImageHandler(processUseCase)
 
-	// Routes
-	http.HandleFunc("/process/", imageHandler.ProcessImage)
+	mainMux.Handle("/images/", http.StripPrefix("/images", imageHandler.Routes()))
 
-	// Start server
-	addr := ":8080"
-	if p := os.Getenv("PORT"); p != "" {
-		addr = ":" + p
-	}
-	log.Printf("Starting server on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	server := &http.Server{Addr: "localhost:8080", Handler: mainMux}
+	log.Println("Listening on port 8080")
+	server.ListenAndServe()
 }

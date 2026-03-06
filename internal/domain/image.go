@@ -1,18 +1,28 @@
 package domain
 
+import (
+	"context"
+	"errors"
+	"io"
+
+	"github.com/google/uuid"
+)
+
+var ErrImageNotFound = errors.New("image not found")
+
 // Image represents a domain entity for image processing
 type Image struct {
-	ID   string
-	Data []byte
+	ID  uuid.UUID `json:"id"`
+	URL string    `json:"url"`
 }
 
 // ImageRepository defines the interface for image storage
-type ImageRepository interface {
-	Save(image *Image) error
-	FindByID(id string) (*Image, error)
+type ImageMetadataRepository interface {
+	Save(ctx context.Context, image *Image) error
+	FindByID(ctx context.Context, id uuid.UUID) (*Image, error)
 }
 
-// ImageProcessor defines the interface for image processing operations
-type ImageProcessor interface {
-	Process(image *Image) (*Image, error)
+type ImageStorageRepository interface {
+	Upload(ctx context.Context, id uuid.UUID, file io.Reader, contentType string) (string, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 }

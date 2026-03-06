@@ -1,34 +1,91 @@
 package application
 
 import (
+	"context"
+	"errors"
+	"io"
+	"mime/multipart"
+	"net/http"
+
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
+	"github.com/google/uuid"
 )
 
-// ProcessImageUseCase handles the business logic for processing images
-type ProcessImageUseCase struct {
-	repo      domain.ImageRepository
-	processor domain.ImageProcessor
+var (
+	AllowedImageType = map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/wepb": true,
+	}
+)
+
+var (
+	ErrUnsupportedImage = errors.New("unsupported image type")
+)
+
+type ImageProcessor interface {
+	Upload(ctx context.Context, file multipart.File) (*domain.Image, error)
 }
 
-// NewProcessImageUseCase creates a new ProcessImageUseCase
-func NewProcessImageUseCase(repo domain.ImageRepository, processor domain.ImageProcessor) *ProcessImageUseCase {
-	return &ProcessImageUseCase{
-		repo:      repo,
-		processor: processor,
+type ProcessImageService struct {
+	metadata domain.ImageMetadataRepository
+	storage  domain.ImageStorageRepository
+}
+
+func NewProcessImageService(
+	metadata domain.ImageMetadataRepository,
+	storage domain.ImageStorageRepository,
+) *ProcessImageService {
+	return &ProcessImageService{
+		metadata: metadata,
+		storage:  storage,
 	}
 }
 
-// Execute processes an image and saves it
-func (uc *ProcessImageUseCase) Execute(id string) error {
-	image, err := uc.repo.FindByID(id)
-	if err != nil {
-		return err
+func (pis *ProcessImageService) Upload(ctx context.Context, file multipart.File) (*domain.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
-	processedImage, err := uc.processor.Process(image)
-	if err != nil {
-		return err
+	buffer := make([]byte, 512)
+	_, err := io.ReadFull(file, buffer)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return nil, err
 	}
 
-	return uc.repo.Save(processedImage)
+	contentType := http.DetectContentType(buffer)
+	if !AllowedImageType[contentType] {
+		return nil, ErrUnsupportedImage
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	// Save image
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	newID, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+	url, err := pis.storage.Upload(ctx, newID, file, contentType)
+	if err != nil {
+		return nil, err
+	}
+
+	newImage := &domain.Image{
+		ID:  newID,
+		URL: url,
+	}
+	err = pis.metadata.Save(ctx, newImage)
+	if err != nil {
+		pis.storage.Delete(context.WithoutCancel(ctx), newID)
+		return nil, err
+	}
+
+	return newImage, nil
 }

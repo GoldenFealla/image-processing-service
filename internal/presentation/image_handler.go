@@ -2,33 +2,72 @@ package presentation
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
 )
 
-// ImageHandler handles HTTP requests for images
+const (
+	MaxByte = 10 << 20
+)
+
 type ImageHandler struct {
-	processUseCase *application.ProcessImageUseCase
+	imageProcessor application.ImageProcessor
 }
 
-// NewImageHandler creates a new ImageHandler
-func NewImageHandler(processUseCase *application.ProcessImageUseCase) *ImageHandler {
+func NewImageHandler(imageProcessor application.ImageProcessor) *ImageHandler {
 	return &ImageHandler{
-		processUseCase: processUseCase,
+		imageProcessor: imageProcessor,
 	}
 }
 
-// ProcessImage handles POST /process/{id}
-func (h *ImageHandler) ProcessImage(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Path[len("/process/"):] // Simple path parsing
+func (h *ImageHandler) Routes() *http.ServeMux {
+	r := http.NewServeMux()
 
-	err := h.processUseCase.Execute(id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	r.HandleFunc("GET /:id", h.RetreiveImage)
+	r.HandleFunc("POST /", h.UploadImage)
+	r.HandleFunc("POST /:id/transform", h.TransformImage)
+
+	return r
+}
+
+func (h *ImageHandler) RetreiveImage(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Retreive"))
+}
+
+func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxByte)
+
+	if err := r.ParseMultipartForm(MaxByte); err != nil {
+		http.Error(w, "file too large or invalid form", http.StatusBadRequest)
 		return
 	}
 
+	file, _, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "missing 'image' field form", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	image, err := h.imageProcessor.Upload(r.Context(), file)
+	if err != nil {
+		switch {
+		case errors.Is(err, application.ErrUnsupportedImage):
+			http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(image)
+}
+
+func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "processed"})
+	w.Write([]byte("Transform"))
 }
