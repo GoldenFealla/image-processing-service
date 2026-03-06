@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	AllowedImageType = map[string]bool{
+	// allowedImageTypes is an immutable set of MIME types we process
+	allowedImageTypes = map[string]bool{
 		"image/jpeg": true,
 		"image/png":  true,
 		"image/gif":  true,
@@ -24,8 +25,10 @@ var (
 	ErrUnsupportedImage = errors.New("unsupported image type")
 )
 
-type ImageProcessor interface {
+type ProcessImageUseCase interface {
+	Retrieve(ctx context.Context, id uuid.UUID) (*domain.Image, error)
 	Upload(ctx context.Context, file multipart.File) (*domain.Image, error)
+	Save(ctx context.Context, id uuid.UUID, file multipart.File) error
 }
 
 type ProcessImageService struct {
@@ -55,7 +58,7 @@ func (pis *ProcessImageService) Upload(ctx context.Context, file multipart.File)
 	}
 
 	contentType := http.DetectContentType(buffer)
-	if !AllowedImageType[contentType] {
+	if !allowedImageTypes[contentType] {
 		return nil, ErrUnsupportedImage
 	}
 
@@ -83,9 +86,28 @@ func (pis *ProcessImageService) Upload(ctx context.Context, file multipart.File)
 	}
 	err = pis.metadata.Save(ctx, newImage)
 	if err != nil {
-		pis.storage.Delete(context.WithoutCancel(ctx), newID)
+		if delErr := pis.storage.Delete(context.WithoutCancel(ctx), newID); delErr != nil {
+			err = errors.Join(err, delErr)
+		}
 		return nil, err
 	}
 
 	return newImage, nil
+}
+
+func (pis *ProcessImageService) Retrieve(ctx context.Context, id uuid.UUID) (*domain.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	image, err := pis.metadata.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return image, nil
+}
+
+func (pis *ProcessImageService) Save(ctx context.Context, id uuid.UUID, file multipart.File) error {
+	return nil
 }

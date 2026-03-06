@@ -14,7 +14,7 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("error loading .env file")
+		log.Fatalf("error loading .env file: %v", err)
 	}
 
 	r2Config := &infrastructure.R2StorageConfig{
@@ -38,12 +38,13 @@ func main() {
 	// === infrastructure ===
 	metadataRepo, err := infrastructure.NewPostgresImageRepository(pgConfig)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initialize postgres repository: %v", err)
 	}
 	defer metadataRepo.Close()
+
 	storageRepo, err := infrastructure.NewR2Storage(r2Config)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to initialize R2 storage: %v", err)
 	}
 
 	// === application ======
@@ -56,5 +57,7 @@ func main() {
 
 	server := &http.Server{Addr: "localhost:8080", Handler: mainMux}
 	log.Println("Listening on port 8080")
-	server.ListenAndServe()
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatalf("server error: %v", err)
+	}
 }

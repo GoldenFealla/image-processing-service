@@ -51,10 +51,11 @@ func (r *R2Storage) Upload(ctx context.Context, id uuid.UUID, file io.Reader, co
 	key := id.String()
 
 	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(r.bucket),
-		Key:         aws.String(key),
-		Body:        file,
-		ContentType: aws.String(contentType),
+		Bucket:       aws.String(r.bucket),
+		Key:          aws.String(key),
+		Body:         file,
+		ContentType:  aws.String(contentType),
+		CacheControl: aws.String("public, max-age=31536000"),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to upload to R2: %w", err)

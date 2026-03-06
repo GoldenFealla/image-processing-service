@@ -1,3 +1,7 @@
+### Retrieve Image
+GET http://localhost:8080/images/019cc1f0-6e55-7d28-a3d7-64b40b11cfa7
+Content-Type: multipart/form-data; boundary=----Boundary
+
 ### Upload Image
 POST http://localhost:8080/images/
 Content-Type: multipart/form-data; boundary=----Boundary
