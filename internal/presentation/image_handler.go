@@ -3,6 +3,7 @@ package presentation
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
@@ -29,7 +30,8 @@ func (h *ImageHandler) Routes() *http.ServeMux {
 
 	r.HandleFunc("GET /{id}", h.RetrieveImage)
 	r.HandleFunc("POST /", h.UploadImage)
-	r.HandleFunc("POST /:id/transform", h.TransformImage)
+	r.HandleFunc("POST /{id}/transform", h.TransformImage)
+	r.HandleFunc("PUT /{id}/save", h.SaveImage)
 
 	return r
 }
@@ -60,7 +62,6 @@ func (h *ImageHandler) RetrieveImage(w http.ResponseWriter, r *http.Request) {
 
 func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
 		http.Error(w, "request body too large or invalid form data", http.StatusBadRequest)
 		return
@@ -90,6 +91,36 @@ func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
+	rawID := r.PathValue("id")
+	id, err := uuid.Parse(rawID)
+	if err != nil {
+		http.Error(w, "invalid image id", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Parse transform options
+	var opts domain.TransformOptions
+	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		http.Error(w, fmt.Sprintf("decode body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	image, err := h.imageProcessor.Transform(r.Context(), id, opts)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrImageNotFound):
+			http.Error(w, "image not found", http.StatusNotFound)
+		default:
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Transform"))
+	w.Write(image)
+	// json.NewEncoder(w).Encode(image)
+}
+
+func (h *ImageHandler) SaveImage(w http.ResponseWriter, r *http.Request) {
 }

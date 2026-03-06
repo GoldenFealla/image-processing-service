@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/GoldenFealla/image-processing-service/internal/domain"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/GoldenFealla/image-processing-service/internal/domain"
 )
 
 type PostgresConfig struct {
@@ -69,6 +69,17 @@ func (pir *PostgresImageRepository) FindByID(ctx context.Context, id uuid.UUID) 
 		return nil, fmt.Errorf("failed to find image: %w", err)
 	}
 	return image, nil
+}
+
+func (pir *PostgresImageRepository) Update(ctx context.Context, image *domain.Image) error {
+	_, err := pir.db.Exec(ctx,
+		`UPDATE images SET url = $1, version = $2 WHERE id = $3`,
+		image.URL, image.Version, image.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update image: %w", err)
+	}
+	return nil
 }
 
 func (pir *PostgresImageRepository) Close() {

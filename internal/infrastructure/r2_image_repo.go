@@ -55,7 +55,7 @@ func (r *R2Storage) Upload(ctx context.Context, id uuid.UUID, file io.Reader, co
 		Key:          aws.String(key),
 		Body:         file,
 		ContentType:  aws.String(contentType),
-		CacheControl: aws.String("public, max-age=31536000"),
+		CacheControl: aws.String("public, max-age=2592000"),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to upload to R2: %w", err)
@@ -73,4 +73,31 @@ func (r *R2Storage) Delete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("failed to delete from R2: %w", err)
 	}
 	return nil
+}
+
+// infrastructure/r2_storage.go
+func (r *R2Storage) Replace(ctx context.Context, id uuid.UUID, file io.Reader, contentType string) (string, error) {
+	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:       aws.String(r.bucket),
+		Key:          aws.String(id.String()),
+		Body:         file,
+		ContentType:  aws.String(contentType),
+		CacheControl: aws.String("public, max-age=2592000"),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to replace image: %w", err)
+	}
+	return fmt.Sprintf("%s/%s", r.publicURL, id.String()), nil
+}
+
+func (r *R2Storage) Download(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	result, err := r.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(id.String()),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to download from R2: %w", err)
+	}
+	defer result.Body.Close()
+	return io.ReadAll(result.Body)
 }

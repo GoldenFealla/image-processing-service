@@ -29,20 +29,24 @@ type ProcessImageUseCase interface {
 	Retrieve(ctx context.Context, id uuid.UUID) (*domain.Image, error)
 	Upload(ctx context.Context, file multipart.File) (*domain.Image, error)
 	Save(ctx context.Context, id uuid.UUID, file multipart.File) error
+	Transform(ctx context.Context, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
 }
 
 type ProcessImageService struct {
-	metadata domain.ImageMetadataRepository
-	storage  domain.ImageStorageRepository
+	metadata  domain.ImageMetadataRepository
+	storage   domain.ImageStorageRepository
+	processor domain.ImageProcessor
 }
 
 func NewProcessImageService(
 	metadata domain.ImageMetadataRepository,
 	storage domain.ImageStorageRepository,
+	processor domain.ImageProcessor,
 ) *ProcessImageService {
 	return &ProcessImageService{
-		metadata: metadata,
-		storage:  storage,
+		metadata:  metadata,
+		storage:   storage,
+		processor: processor,
 	}
 }
 
@@ -110,4 +114,17 @@ func (pis *ProcessImageService) Retrieve(ctx context.Context, id uuid.UUID) (*do
 
 func (pis *ProcessImageService) Save(ctx context.Context, id uuid.UUID, file multipart.File) error {
 	return nil
+}
+
+func (pis *ProcessImageService) Transform(ctx context.Context, id uuid.UUID, opts domain.TransformOptions) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	image, err := pis.storage.Download(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return pis.processor.Transform(ctx, image, opts)
 }

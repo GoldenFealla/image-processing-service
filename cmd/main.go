@@ -47,8 +47,10 @@ func main() {
 		log.Fatalf("failed to initialize R2 storage: %v", err)
 	}
 
+	imageProcessor := infrastructure.NewVipsImageProcessor()
+
 	// === application ======
-	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo)
+	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo, imageProcessor)
 
 	// === presentation =====
 	imageHandler := presentation.NewImageHandler(processUseCase)
