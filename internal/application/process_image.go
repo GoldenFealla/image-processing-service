@@ -33,6 +33,7 @@ type ProcessImageUseCase interface {
 }
 
 type ProcessImageService struct {
+	cache     domain.ImageCache
 	metadata  domain.ImageMetadataRepository
 	storage   domain.ImageStorageRepository
 	processor domain.ImageProcessor
@@ -42,11 +43,13 @@ func NewProcessImageService(
 	metadata domain.ImageMetadataRepository,
 	storage domain.ImageStorageRepository,
 	processor domain.ImageProcessor,
+	cache domain.ImageCache,
 ) *ProcessImageService {
 	return &ProcessImageService{
 		metadata:  metadata,
 		storage:   storage,
 		processor: processor,
+		cache:     cache,
 	}
 }
 
@@ -121,10 +124,31 @@ func (pis *ProcessImageService) Transform(ctx context.Context, id uuid.UUID, opt
 		return nil, err
 	}
 
-	image, err := pis.storage.Download(ctx, id)
+	cachedTransform, err := pis.cache.GetTransformed(ctx, id, opts)
+	if err != nil {
+		return nil, err
+	}
+	if cachedTransform != nil {
+		return cachedTransform, nil
+	}
+
+	original, err := pis.cache.GetOriginal(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if original == nil {
+		original, err = pis.storage.Download(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		go pis.cache.SetOriginal(context.WithoutCancel(ctx), id, original)
+	}
+
+	transformed, err := pis.processor.Transform(ctx, original, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return pis.processor.Transform(ctx, image, opts)
+	go pis.cache.SetTransformed(context.WithoutCancel(ctx), id, opts, transformed)
+	return transformed, nil
 }

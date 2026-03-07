@@ -36,7 +36,6 @@ func NewR2Storage(opts *R2StorageConfig) (*R2Storage, error) {
 	}
 
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		// ✅ Current approach — BaseEndpoint directly on s3.Options
 		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", opts.AccountID))
 	})
 

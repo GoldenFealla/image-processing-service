@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -33,6 +34,13 @@ func main() {
 		DBName:   os.Getenv("DB_NAME"),
 	}
 
+	valkeyImageConfig := infrastructure.ImageCacheConfig{
+		Addr:     os.Getenv("VALKEY_ADDR"),
+		Password: os.Getenv("VALKEY_PASSWORD"),
+		DB:       0,
+		TTL:      30 * time.Minute,
+	}
+
 	mainMux := http.NewServeMux()
 
 	// === infrastructure ===
@@ -49,8 +57,13 @@ func main() {
 
 	imageProcessor := infrastructure.NewVipsImageProcessor()
 
+	imageCache, err := infrastructure.NewImageCache(valkeyImageConfig)
+	if err != nil {
+		log.Fatalf("failed to initialize image cache: %v", err)
+	}
+
 	// === application ======
-	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo, imageProcessor)
+	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo, imageProcessor, imageCache)
 
 	// === presentation =====
 	imageHandler := presentation.NewImageHandler(processUseCase)

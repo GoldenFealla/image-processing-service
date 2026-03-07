@@ -18,10 +18,8 @@ POST http://localhost:8080/images/019cc1db-2e84-7890-85c1-b5d273400d08/transform
 Content-Type: application/json
 
 {
-  "resize": {
-    "width": 1000,
-    "height": 1772
+  "rotate": {
+    "angle":180
   },
-  "format": "png",
-  "filters": ["grayscale"]
+  "format": "png"
 }

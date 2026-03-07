@@ -35,6 +35,13 @@ type ImageProcessor interface {
 	Transform(ctx context.Context, data []byte, opts TransformOptions) ([]byte, error)
 }
 
+type ImageCache interface {
+	GetOriginal(ctx context.Context, id uuid.UUID) ([]byte, error)
+	SetOriginal(ctx context.Context, id uuid.UUID, data []byte) error
+	GetTransformed(ctx context.Context, id uuid.UUID, opts TransformOptions) ([]byte, error)
+	SetTransformed(ctx context.Context, id uuid.UUID, opts TransformOptions, data []byte) error
+}
+
 type Format string
 type Filter string
 

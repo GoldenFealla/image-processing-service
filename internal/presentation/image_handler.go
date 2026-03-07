@@ -98,7 +98,6 @@ func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Parse transform options
 	var opts domain.TransformOptions
 	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
 		http.Error(w, fmt.Sprintf("decode body: %v", err), http.StatusBadRequest)
@@ -116,10 +115,8 @@ func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(image)
-	// json.NewEncoder(w).Encode(image)
 }
 
 func (h *ImageHandler) SaveImage(w http.ResponseWriter, r *http.Request) {
