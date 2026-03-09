@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	// allowedImageTypes is an immutable set of MIME types we process
 	allowedImageTypes = map[string]bool{
 		"image/jpeg": true,
 		"image/png":  true,
