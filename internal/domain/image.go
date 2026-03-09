@@ -15,6 +15,7 @@ type Image struct {
 	ID      uuid.UUID `json:"id"`
 	URL     string    `json:"url"`
 	Version int       `json:"version"`
+	OwnerID uuid.UUID `json:"owner_id"`
 }
 
 // ImageRepository defines the interface for image storage
@@ -25,10 +26,10 @@ type ImageMetadataRepository interface {
 }
 
 type ImageStorageRepository interface {
-	Upload(ctx context.Context, id uuid.UUID, file io.Reader, contentType string) (string, error)
-	Replace(ctx context.Context, id uuid.UUID, file io.Reader, contentType string) (string, error)
-	Download(ctx context.Context, id uuid.UUID) ([]byte, error)
-	Delete(ctx context.Context, id uuid.UUID) error
+	Upload(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error)
+	Replace(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error)
+	Download(ctx context.Context, userID, id uuid.UUID) ([]byte, error)
+	Delete(ctx context.Context, userID, id uuid.UUID) error
 }
 
 type ImageProcessor interface {

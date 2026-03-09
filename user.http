@@ -1,0 +1,35 @@
+@refreshToken = 29cada7a1d5d1b2a65bdfc5013a0c7b136c5fb9013e9e7a955dabd0c77b7b8db
+
+### Register
+POST http://localhost:8080/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+### Login
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+### Refresh Token
+POST http://localhost:8080/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "179c96d2c9d2e7645458ff1b07a5f7a8d2c035d70141b32944750f6c2975f996"
+}
+
+### Logout
+POST http://localhost:8080/auth/logout
+Content-Type: application/json
+
+{
+  "refresh_token": "your_refresh_token_here"
+}

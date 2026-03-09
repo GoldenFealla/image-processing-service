@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
@@ -16,12 +17,12 @@ const (
 )
 
 type ImageHandler struct {
-	imageProcessor application.ProcessImageUseCase
+	imageUsecase application.ProcessImageUseCase
 }
 
-func NewImageHandler(imageProcessor application.ProcessImageUseCase) *ImageHandler {
+func NewImageHandler(imageUsecase application.ProcessImageUseCase) *ImageHandler {
 	return &ImageHandler{
-		imageProcessor: imageProcessor,
+		imageUsecase: imageUsecase,
 	}
 }
 
@@ -44,12 +45,18 @@ func (h *ImageHandler) RetrieveImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	image, err := h.imageProcessor.Retrieve(r.Context(), id)
+	userID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
+
+	image, err := h.imageUsecase.Retrieve(r.Context(), userID, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrImageNotFound):
 			http.Error(w, "image not found", http.StatusNotFound)
 		default:
+			log.Println(err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
@@ -61,6 +68,11 @@ func (h *ImageHandler) RetrieveImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
 		http.Error(w, "request body too large or invalid form data", http.StatusBadRequest)
@@ -74,7 +86,7 @@ func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	image, err := h.imageProcessor.Upload(r.Context(), file)
+	image, err := h.imageUsecase.Upload(r.Context(), userID, file)
 	if err != nil {
 		switch {
 		case errors.Is(err, application.ErrUnsupportedImage):
@@ -98,18 +110,24 @@ func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
+
 	var opts domain.TransformOptions
 	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
 		http.Error(w, fmt.Sprintf("decode body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	image, err := h.imageProcessor.Transform(r.Context(), id, opts)
+	image, err := h.imageUsecase.Transform(r.Context(), userID, id, opts)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrImageNotFound):
 			http.Error(w, "image not found", http.StatusNotFound)
 		default:
+			log.Println(err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return

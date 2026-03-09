@@ -25,10 +25,10 @@ var (
 )
 
 type ProcessImageUseCase interface {
-	Retrieve(ctx context.Context, id uuid.UUID) (*domain.Image, error)
-	Upload(ctx context.Context, file multipart.File) (*domain.Image, error)
-	Save(ctx context.Context, id uuid.UUID, file multipart.File) error
-	Transform(ctx context.Context, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
+	Retrieve(ctx context.Context, userID, id uuid.UUID) (*domain.Image, error)
+	Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error)
+	Save(ctx context.Context, userID, id uuid.UUID, file multipart.File) error
+	Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
 }
 
 type ProcessImageService struct {
@@ -52,7 +52,7 @@ func NewProcessImageService(
 	}
 }
 
-func (pis *ProcessImageService) Upload(ctx context.Context, file multipart.File) (*domain.Image, error) {
+func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -81,18 +81,20 @@ func (pis *ProcessImageService) Upload(ctx context.Context, file multipart.File)
 	if err != nil {
 		return nil, err
 	}
-	url, err := pis.storage.Upload(ctx, newID, file, contentType)
+	url, err := pis.storage.Upload(ctx, userID, newID, file, contentType)
 	if err != nil {
 		return nil, err
 	}
 
 	newImage := &domain.Image{
-		ID:  newID,
-		URL: url,
+		ID:      newID,
+		URL:     url,
+		Version: 0,
+		OwnerID: userID,
 	}
 	err = pis.metadata.Save(ctx, newImage)
 	if err != nil {
-		if delErr := pis.storage.Delete(context.WithoutCancel(ctx), newID); delErr != nil {
+		if delErr := pis.storage.Delete(context.WithoutCancel(ctx), userID, newID); delErr != nil {
 			err = errors.Join(err, delErr)
 		}
 		return nil, err
@@ -101,7 +103,7 @@ func (pis *ProcessImageService) Upload(ctx context.Context, file multipart.File)
 	return newImage, nil
 }
 
-func (pis *ProcessImageService) Retrieve(ctx context.Context, id uuid.UUID) (*domain.Image, error) {
+func (pis *ProcessImageService) Retrieve(ctx context.Context, userid, id uuid.UUID) (*domain.Image, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -114,11 +116,11 @@ func (pis *ProcessImageService) Retrieve(ctx context.Context, id uuid.UUID) (*do
 	return image, nil
 }
 
-func (pis *ProcessImageService) Save(ctx context.Context, id uuid.UUID, file multipart.File) error {
+func (pis *ProcessImageService) Save(ctx context.Context, userID, id uuid.UUID, file multipart.File) error {
 	return nil
 }
 
-func (pis *ProcessImageService) Transform(ctx context.Context, id uuid.UUID, opts domain.TransformOptions) ([]byte, error) {
+func (pis *ProcessImageService) Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -136,7 +138,7 @@ func (pis *ProcessImageService) Transform(ctx context.Context, id uuid.UUID, opt
 		return nil, err
 	}
 	if original == nil {
-		original, err = pis.storage.Download(ctx, id)
+		original, err = pis.storage.Download(ctx, userID, id)
 		if err != nil {
 			return nil, err
 		}

@@ -1,0 +1,29 @@
+@accessToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzMwNDE0MTMsInN1YiI6IjAxOWNkMTU0LTljMWQtNzI4ZC1hMmI5LTlhMjViMmNiNjYzYiJ9.zIx0B4Ica39I8sXl09WpqRYo9MiYYgROhX8uuvkZepw
+
+### Retrieve Image
+GET http://localhost:8080/images/019cd177-02b5-73d7-9818-961bc5c96804
+Authorization: Bearer {{accessToken}}
+
+### Upload Image
+POST http://localhost:8080/images/
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=----Boundary
+
+------Boundary
+Content-Disposition: form-data; name="image"; filename="test.png"
+Content-Type: image/png
+
+< ./test.png
+------Boundary--
+
+### Transform Image
+POST http://localhost:8080/images/019cd177-02b5-73d7-9818-961bc5c96804/transform
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "rotate": {
+    "angle":180
+  },
+  "format": "png"
+}

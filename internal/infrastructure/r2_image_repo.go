@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -46,8 +47,8 @@ func NewR2Storage(opts *R2StorageConfig) (*R2Storage, error) {
 	}, nil
 }
 
-func (r *R2Storage) Upload(ctx context.Context, id uuid.UUID, file io.Reader, contentType string) (string, error) {
-	key := id.String()
+func (r *R2Storage) Upload(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error) {
+	key := fmt.Sprintf("images/%s/%s", userID.String(), id.String())
 
 	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:       aws.String(r.bucket),
@@ -63,10 +64,12 @@ func (r *R2Storage) Upload(ctx context.Context, id uuid.UUID, file io.Reader, co
 	return fmt.Sprintf("%s/%s", r.publicURL, key), nil
 }
 
-func (r *R2Storage) Delete(ctx context.Context, id uuid.UUID) error {
+func (r *R2Storage) Delete(ctx context.Context, userID, id uuid.UUID) error {
+	key := fmt.Sprintf("images/%s/%s", userID.String(), id.String())
+
 	_, err := r.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(r.bucket),
-		Key:    aws.String(id.String()),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete from R2: %w", err)
@@ -75,10 +78,12 @@ func (r *R2Storage) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // infrastructure/r2_storage.go
-func (r *R2Storage) Replace(ctx context.Context, id uuid.UUID, file io.Reader, contentType string) (string, error) {
+func (r *R2Storage) Replace(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error) {
+	key := fmt.Sprintf("images/%s/%s", userID.String(), id.String())
+
 	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:       aws.String(r.bucket),
-		Key:          aws.String(id.String()),
+		Key:          aws.String(key),
 		Body:         file,
 		ContentType:  aws.String(contentType),
 		CacheControl: aws.String("public, max-age=2592000"),
@@ -89,10 +94,13 @@ func (r *R2Storage) Replace(ctx context.Context, id uuid.UUID, file io.Reader, c
 	return fmt.Sprintf("%s/%s", r.publicURL, id.String()), nil
 }
 
-func (r *R2Storage) Download(ctx context.Context, id uuid.UUID) ([]byte, error) {
+func (r *R2Storage) Download(ctx context.Context, userID, id uuid.UUID) ([]byte, error) {
+	key := fmt.Sprintf("images/%s/%s", userID.String(), id.String())
+	log.Printf("key: %v", key)
+
 	result, err := r.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.bucket),
-		Key:    aws.String(id.String()),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to download from R2: %w", err)
