@@ -1,4 +1,8 @@
-@refreshToken = 29cada7a1d5d1b2a65bdfc5013a0c7b136c5fb9013e9e7a955dabd0c77b7b8db
+@accessToken = eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzMxMjQ4NjYsImlhdCI6MTc3MzEyNDU2Niwic3ViIjoiMDE5Y2QxNTQtOWMxZC03MjhkLWEyYjktOWEyNWIyY2I2NjNiIn0.7qft6nIQTEOE7kAo5nQY6fFbS1DkW7sIOXIZHLQzgdxQc9a5J3INDDx-6JkHm0CS8jWTle-SyekMBM-EIEj_Zw
+
+### Check
+GET http://localhost:8080/auth/check
+Authorization: Bearer {{accessToken}}
 
 ### Register
 POST http://localhost:8080/auth/register
@@ -20,11 +24,8 @@ Content-Type: application/json
 
 ### Refresh Token
 POST http://localhost:8080/auth/refresh
-Content-Type: application/json
+Cookie: refresh_token=0b2ab4fb1e77f6bda96a8c8cf62a13997fc8989b73dc1dc1d6f6dd6d085069fe; Path=/auth/refresh; Max-Age=604800; HttpOnly; SameSite=Strict
 
-{
-  "refresh_token": "179c96d2c9d2e7645458ff1b07a5f7a8d2c035d70141b32944750f6c2975f996"
-}
 
 ### Logout
 POST http://localhost:8080/auth/logout

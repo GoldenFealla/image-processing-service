@@ -20,3 +20,6 @@
 
 # IDE files
 .vscode/
+
+# Keys
+*.pem

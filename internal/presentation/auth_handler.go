@@ -18,6 +18,8 @@ func NewAuthHandler(auth *application.AuthService) *AuthHandler {
 func (h *AuthHandler) Routes() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /check", h.check)
+
 	mux.HandleFunc("POST /register", h.register)
 	mux.HandleFunc("POST /login", h.login)
 	mux.HandleFunc("POST /refresh", h.refresh)
@@ -27,6 +29,24 @@ func (h *AuthHandler) Routes() http.Handler {
 	// mux.HandleFunc("GET /google/callback", h.googleCallback)
 
 	return mux
+}
+
+func (h *AuthHandler) check(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" || len(authHeader) < 8 {
+		http.Error(w, "missing token", http.StatusUnauthorized)
+		return
+	}
+
+	tokenStr := authHeader[7:] // strip "Bearer "
+
+	_, err := h.auth.ValidateAccessToken(tokenStr)
+	if err != nil {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
@@ -68,15 +88,13 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		http.Error(w, "missing refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	tokens, err := h.auth.Refresh(r.Context(), body.RefreshToken)
+	tokens, err := h.auth.Refresh(r.Context(), cookie.Value)
 	if err != nil {
 		http.Error(w, "invalid refresh token", http.StatusUnauthorized)
 		return
@@ -126,6 +144,18 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 // }
 
 func writeTokens(w http.ResponseWriter, tokens *application.TokenPair) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    tokens.RefreshToken,
+		HttpOnly: true,
+		Secure:   false, // Change later
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/auth/refresh",  // only sent to refresh endpoint
+		MaxAge:   7 * 24 * 60 * 60, // 7 days in seconds
+	})
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tokens)
+	json.NewEncoder(w).Encode(map[string]string{
+		"access_token": tokens.AccessToken,
+	})
 }

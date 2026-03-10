@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -32,6 +33,9 @@ type AuthConfig struct {
 	AccessTokenTTL  time.Duration // 15 min
 	RefreshTokenTTL time.Duration // 7 days
 
+	PublicKey  *ecdsa.PublicKey
+	PrivateKey *ecdsa.PrivateKey
+
 	GoogleClientID     string
 	GoogleClientSecret string
 }
@@ -52,10 +56,13 @@ type TokenPair struct {
 }
 
 var (
+	ErrInvalidToken            = errors.New("invalid token")
+	ErrTokenExpired            = errors.New("expired token")
 	ErrInvalidCredentials      = errors.New("invalid credentials")
-	ErrInvalidToken            = errors.New("invalid or expired refresh token")
 	ErrInvalidClaims           = errors.New("invalid claims")
 	ErrUnexpectedSigningMethod = errors.New("unexpected signing method")
+	ErrInvalidSubClaim         = errors.New("invalid sub claim")
+	ErrInvalidUserID           = errors.New("invalid user id in token")
 )
 
 // === Local ===
@@ -110,12 +117,15 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 
 func (s *AuthService) ValidateAccessToken(tokenStr string) (uuid.UUID, error) {
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if _, ok := t.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, ErrUnexpectedSigningMethod
 		}
-		return []byte(s.config.JWTSecret), nil
+		return s.config.PublicKey, nil
 	})
 	if err != nil || !token.Valid {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return uuid.Nil, ErrTokenExpired
+		}
 		return uuid.Nil, ErrInvalidToken
 	}
 
@@ -126,12 +136,12 @@ func (s *AuthService) ValidateAccessToken(tokenStr string) (uuid.UUID, error) {
 
 	sub, ok := claims["sub"].(string)
 	if !ok {
-		return uuid.Nil, errors.New("invalid sub claim")
+		return uuid.Nil, ErrInvalidSubClaim
 	}
 
 	userID, err := uuid.Parse(sub)
 	if err != nil {
-		return uuid.Nil, errors.New("invalid user id in token")
+		return uuid.Nil, ErrInvalidUserID
 	}
 
 	return userID, nil
@@ -182,8 +192,9 @@ func (s *AuthService) generateAccessToken(userID uuid.UUID) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID,
 		"exp": time.Now().Add(s.config.AccessTokenTTL).Unix(),
+		"iat": time.Now().Unix(),
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.config.JWTSecret))
+	return jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(s.config.PrivateKey)
 }
 
 func (s *AuthService) generateRefreshToken() (string, error) {

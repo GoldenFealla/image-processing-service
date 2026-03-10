@@ -151,6 +151,7 @@ func (v *VipsImageProcessor) filters(filters []domain.Filter) func(*vips.Image) 
 				if err := img.Colourspace(vips.InterpretationSrgb, vips.DefaultColourspaceOptions()); err != nil {
 					return fmt.Errorf("failed to apply grayscale: %w", err)
 				}
+				// TODO: Add more filter
 				// case domain.FilterSepia:
 				// 	if err := applySepia(img); err != nil {
 				// 		return fmt.Errorf("failed to apply sepia: %w", err)
