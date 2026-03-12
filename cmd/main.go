@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/rs/cors"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
 	"github.com/GoldenFealla/image-processing-service/internal/infrastructure"
@@ -63,6 +64,13 @@ func main() {
 	imageHandler := presentation.NewImageHandler(processUseCase)
 	userHandler := presentation.NewAuthHandler(authUseCase)
 
+	handler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:4200"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+	}).Handler(mainMux)
+
 	mainMux.Handle("/images/", middleware.Chain(
 		http.StripPrefix("/images", imageHandler.Routes()),
 		middleware.JWTMiddleware(authUseCase),
@@ -72,7 +80,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    "localhost:8080",
-		Handler: middleware.Chain(mainMux, middleware.LoggerMiddleware),
+		Handler: middleware.Chain(handler, middleware.LoggerMiddleware),
 	}
 	log.Println("Listening on port 8080")
 	if err := server.ListenAndServe(); err != nil {
