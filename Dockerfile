@@ -3,10 +3,8 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Install full build toolchain + libvips deps
 RUN apk add --no-cache \
     build-base \
-    g++ \
     pkgconfig \
     meson \
     ninja \
@@ -24,15 +22,15 @@ RUN apk add --no-cache \
 
 # Build libvips
 RUN curl -L https://github.com/libvips/libvips/releases/download/v8.18.0/vips-8.18.0.tar.xz -o vips.tar.xz \
-    && tar -xf vips.tar.xz \
-    && cd vips-8.18.0 \
-    && meson setup build --prefix=/usr --libdir=lib -Dbuildtype=release \
-    && ninja -C build \
-    && ninja -C build install \
-    && cd /app \
-    && rm -rf vips*
+ && tar -xf vips.tar.xz \
+ && cd vips-8.18.0 \
+ && meson setup build --prefix=/usr --libdir=lib -Dbuildtype=release \
+ && ninja -C build \
+ && ninja -C build install \
+ && cd /app \
+ && rm -rf vips*
 
-# Cache Go dependencies
+# Cache Go modules
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -48,7 +46,6 @@ FROM alpine:3.21
 
 WORKDIR /app
 
-# Runtime libs for libvips
 RUN apk add --no-cache \
     glib \
     expat \

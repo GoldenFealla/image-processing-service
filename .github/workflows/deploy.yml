@@ -1,13 +1,42 @@
-name: Update Server
+name: Build and Deploy Image Service
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+          docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE=ghcr.io/goldenfealla/image-service
+          docker buildx build \
+          --platform linux/amd64 \
+          --cache-from=type=registry,ref=$IMAGE:cache \
+          --cache-to=type=registry,ref=$IMAGE:cache,mode=max \
+          -t $IMAGE:${{ github.sha }} \
+          -t $IMAGE:latest \
+          --push \
+          .
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v2
         with:
@@ -15,7 +44,7 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      - name: Deploy via SSH
+      - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -23,11 +52,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            cd ~/services/image-service
-            git fetch origin
-            git checkout main
-            git pull
-            docker build -t image-service .
+            docker pull ghcr.io/goldenfealla/image-service:latest
             docker stop image-service || true
             docker rm image-service || true
             docker run -d \
@@ -36,4 +61,4 @@ jobs:
               --env-file ~/services/image-service/.env \
               --restart unless-stopped \
               -p 8081:8081 \
-              image-service
+              ghcr.io/goldenfealla/image-service:latest
