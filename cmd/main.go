@@ -79,10 +79,10 @@ func main() {
 	mainMux.Handle("/auth/", http.StripPrefix("/auth", userHandler.Routes()))
 
 	server := &http.Server{
-		Addr:    "localhost:8080",
+		Addr:    "localhost:8081",
 		Handler: middleware.Chain(handler, middleware.LoggerMiddleware),
 	}
-	log.Println("Listening on port 8080")
+	log.Println("Listening on port 8081")
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
