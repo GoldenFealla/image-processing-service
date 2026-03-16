@@ -1,40 +1,76 @@
-# ------ Build stage ------
+# ---------- Build stage ----------
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies for libvips
+# Install full build toolchain + libvips deps
 RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    vips-dev \
-    pkgconfig
+    build-base \
+    g++ \
+    pkgconfig \
+    meson \
+    ninja \
+    curl \
+    glib-dev \
+    expat-dev \
+    jpeg-dev \
+    libpng-dev \
+    libwebp-dev \
+    tiff-dev \
+    libexif-dev \
+    lcms2-dev \
+    fftw-dev \
+    orc-dev
 
-# Copy go.mod and go.sum first to leverage Docker cache for dependencies
+# Build libvips
+RUN curl -L https://github.com/libvips/libvips/releases/download/v8.18.0/vips-8.18.0.tar.xz -o vips.tar.xz \
+    && tar -xf vips.tar.xz \
+    && cd vips-8.18.0 \
+    && meson setup build --prefix=/usr --libdir=lib -Dbuildtype=release \
+    && ninja -C build \
+    && ninja -C build install \
+    && cd /app \
+    && rm -rf vips*
+
+# Cache Go dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the rest of the source code
+# Copy source
 COPY . .
 
-# Build the Go application
-# CGO_ENABLED=1 required for libvips (cgo binding)
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o server ./cmd/main.go
+# Build Go server
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o server ./cmd/main.go
 
 
-# ------ Runtime stage ------
-FROM alpine:3.19
+# ---------- Runtime stage ----------
+FROM alpine:3.21
 
 WORKDIR /app
 
-# Install libvips runtime dependencies
+# Runtime libs for libvips
 RUN apk add --no-cache \
-    vips \
+    glib \
+    expat \
+    jpeg \
+    libpng \
+    libwebp \
+    tiff \
+    libexif \
+    lcms2 \
+    fftw \
+    orc \
     ca-certificates \
     tzdata
 
-# Copy the binary from builder stage
+# Copy libvips
+COPY --from=builder /usr/lib/libvips* /usr/lib/
+COPY --from=builder /usr/lib/libvips-cpp* /usr/lib/
+COPY --from=builder /usr/lib/vips-modules* /usr/lib/
+
+# Copy binary
 COPY --from=builder /app/server .
 
 EXPOSE 8081
+
 CMD ["./server"]
