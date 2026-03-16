@@ -27,7 +27,7 @@ var (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("error loading .env file: %v", err)
+		log.Println("No .env file, ignored")
 	}
 
 	mainMux := http.NewServeMux()
