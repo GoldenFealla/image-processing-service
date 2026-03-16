@@ -12,16 +12,17 @@ var ErrImageNotFound = errors.New("image not found")
 
 // Image represents a domain entity for image processing
 type Image struct {
-	ID      uuid.UUID `json:"id"`
-	URL     string    `json:"url"`
-	Version int       `json:"version"`
-	OwnerID uuid.UUID `json:"owner_id"`
+	ID      uuid.UUID `db:"id"       json:"id"`
+	URL     string    `db:"url"      json:"url"`
+	Version int       `db:"version"  json:"version"`
+	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
 }
 
 // ImageRepository defines the interface for image storage
 type ImageMetadataRepository interface {
 	Save(ctx context.Context, image *Image) error
 	FindByID(ctx context.Context, id uuid.UUID) (*Image, error)
+	FindListByOwnerID(ctx context.Context, userID uuid.UUID) ([]*Image, error)
 	Update(ctx context.Context, image *Image) error
 }
 

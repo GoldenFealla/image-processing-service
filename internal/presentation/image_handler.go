@@ -29,15 +29,16 @@ func NewImageHandler(imageUsecase application.ProcessImageUseCase) *ImageHandler
 func (h *ImageHandler) Routes() *http.ServeMux {
 	r := http.NewServeMux()
 
-	r.HandleFunc("GET /{id}", h.RetrieveImage)
-	r.HandleFunc("POST /", h.UploadImage)
-	r.HandleFunc("POST /{id}/transform", h.TransformImage)
-	r.HandleFunc("PUT /{id}/save", h.SaveImage)
+	r.HandleFunc("GET /{id}", h.retrieve)
+	r.HandleFunc("GET /", h.list)
+	r.HandleFunc("POST /", h.upload)
+	r.HandleFunc("POST /{id}/transform", h.transform)
+	r.HandleFunc("PUT /{id}/save", h.save)
 
 	return r
 }
 
-func (h *ImageHandler) RetrieveImage(w http.ResponseWriter, r *http.Request) {
+func (h *ImageHandler) retrieve(w http.ResponseWriter, r *http.Request) {
 	rawID := r.PathValue("id")
 	id, err := uuid.Parse(rawID)
 	if err != nil {
@@ -67,7 +68,30 @@ func (h *ImageHandler) RetrieveImage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(image)
 }
 
-func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
+func (h *ImageHandler) list(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
+
+	images, err := h.imageUsecase.List(r.Context(), userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrImageNotFound):
+			http.Error(w, "user doesn't have image", http.StatusNotFound)
+		default:
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(images)
+}
+
+func (h *ImageHandler) upload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("userID").(uuid.UUID)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -102,7 +126,7 @@ func (h *ImageHandler) UploadImage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(image)
 }
 
-func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
+func (h *ImageHandler) transform(w http.ResponseWriter, r *http.Request) {
 	rawID := r.PathValue("id")
 	id, err := uuid.Parse(rawID)
 	if err != nil {
@@ -137,5 +161,5 @@ func (h *ImageHandler) TransformImage(w http.ResponseWriter, r *http.Request) {
 	w.Write(image)
 }
 
-func (h *ImageHandler) SaveImage(w http.ResponseWriter, r *http.Request) {
+func (h *ImageHandler) save(w http.ResponseWriter, r *http.Request) {
 }

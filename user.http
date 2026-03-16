@@ -24,7 +24,7 @@ Content-Type: application/json
 
 ### Refresh Token
 POST http://localhost:8080/auth/refresh
-Cookie: refresh_token=0b2ab4fb1e77f6bda96a8c8cf62a13997fc8989b73dc1dc1d6f6dd6d085069fe; Path=/auth/refresh; Max-Age=604800; HttpOnly; SameSite=Strict
+Cookie: refresh_token=576cdb1000762af550159b37556a7aa63cfa9c49b026b98c479d1baa136cfdb8; Path=/auth/refresh; Max-Age=604800; HttpOnly; SameSite=Strict
 
 
 ### Logout

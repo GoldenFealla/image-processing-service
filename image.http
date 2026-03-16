@@ -1,6 +1,10 @@
-@accessToken = eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzMxMjI4OTgsImlhdCI6MTc3MzEyMjgzOCwic3ViIjoiMDE5Y2QxNTQtOWMxZC03MjhkLWEyYjktOWEyNWIyY2I2NjNiIn0.0q553BJY9Fv21jdoXI9VOb1WjatrgpspPHeejiIhvw9EGLeqL0G21VHFFajgYXj_vgRL8wSa5q6RxF9rhdLUpg
+@accessToken = eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzM2MzQyNzcsImlhdCI6MTc3MzYzMzk3Nywic3ViIjoiMDE5Y2QxNTQtOWMxZC03MjhkLWEyYjktOWEyNWIyY2I2NjNiIn0.yqC57J19N6udmHSU5egWl61ux0IKOf5CgxYGw6kb3-SZ_1EzZaIKLB66pblGIuShR8hDBfssv3GS3EPviAKGyQ
 ### Retrieve Image
 GET http://localhost:8080/images/019cd177-02b5-73d7-9818-961bc5c96804
+Authorization: Bearer {{accessToken}}
+
+### List Images
+GET http://localhost:8080/images/
 Authorization: Bearer {{accessToken}}
 
 ### Upload Image

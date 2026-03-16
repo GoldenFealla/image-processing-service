@@ -26,6 +26,7 @@ var (
 
 type ProcessImageUseCase interface {
 	Retrieve(ctx context.Context, userID, id uuid.UUID) (*domain.Image, error)
+	List(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error)
 	Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error)
 	Save(ctx context.Context, userID, id uuid.UUID, file multipart.File) error
 	Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
@@ -50,6 +51,32 @@ func NewProcessImageService(
 		processor: processor,
 		cache:     cache,
 	}
+}
+
+func (pis *ProcessImageService) Retrieve(ctx context.Context, userid, id uuid.UUID) (*domain.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	image, err := pis.metadata.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return image, nil
+}
+
+func (pis *ProcessImageService) List(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	images, err := pis.metadata.FindListByOwnerID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return images, nil
 }
 
 func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error) {
@@ -101,19 +128,6 @@ func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, fi
 	}
 
 	return newImage, nil
-}
-
-func (pis *ProcessImageService) Retrieve(ctx context.Context, userid, id uuid.UUID) (*domain.Image, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	image, err := pis.metadata.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	return image, nil
 }
 
 func (pis *ProcessImageService) Save(ctx context.Context, userID, id uuid.UUID, file multipart.File) error {
