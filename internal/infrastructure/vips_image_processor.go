@@ -1,8 +1,11 @@
 package infrastructure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"strconv"
 
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
 	"github.com/cshum/vipsgen/vips"
@@ -30,6 +33,7 @@ func (v *VipsImageProcessor) Transform(ctx context.Context, data []byte, opts do
 	fmt.Printf("DEBUG loaded: width=%d height=%d bands=%d colorspace=%v hasAlpha=%v\n",
 		img.Width(), img.Height(), img.Bands(), img.Interpretation(), img.HasAlpha())
 	fmt.Printf("DEBUG format: %s\n", img.Format())
+	fmt.Printf("DEBUG filter: %s\n", opts.Filters)
 
 	pipeline := []func(*vips.Image) error{
 		v.crop(opts.Crop),
@@ -145,18 +149,22 @@ func (v *VipsImageProcessor) filters(filters []domain.Filter) func(*vips.Image) 
 		for _, filter := range filters {
 			switch filter {
 			case domain.FilterGrayscale:
-				if err := img.Colourspace(vips.InterpretationBW, vips.DefaultColourspaceOptions()); err != nil {
-					return fmt.Errorf("failed to apply grayscale: %w", err)
+				{
+					if err := img.Colourspace(vips.InterpretationBW, vips.DefaultColourspaceOptions()); err != nil {
+						return fmt.Errorf("failed to apply grayscale: %w", err)
+					}
+					if err := img.Colourspace(vips.InterpretationSrgb, vips.DefaultColourspaceOptions()); err != nil {
+						return fmt.Errorf("failed to apply grayscale: %w", err)
+					}
 				}
-				if err := img.Colourspace(vips.InterpretationSrgb, vips.DefaultColourspaceOptions()); err != nil {
-					return fmt.Errorf("failed to apply grayscale: %w", err)
+			case domain.FilterSepia:
+				{
+					if err := applySepia(img); err != nil {
+						return fmt.Errorf("failed to apply sepia: %w", err)
+					}
 				}
-				// TODO: Add more filter
-				// case domain.FilterSepia:
-				// 	if err := applySepia(img); err != nil {
-				// 		return fmt.Errorf("failed to apply sepia: %w", err)
-				// 	}
 			}
+			// TODO: Add more filter
 		}
 		return nil
 	}
@@ -189,7 +197,6 @@ func (v *VipsImageProcessor) watermark(opts *domain.WatermarkOptions) func(*vips
 }
 
 // ========= helper =========
-
 func resolveWatermarkPosition(img *vips.Image, watermark *vips.Image, position string) (int, int) {
 	switch position {
 	case "top-left":
@@ -203,4 +210,42 @@ func resolveWatermarkPosition(img *vips.Image, watermark *vips.Image, position s
 	default: // center
 		return (img.Width() - watermark.Width()) / 2, (img.Height() - watermark.Height()) / 2
 	}
+}
+
+var sepiaMatrix = []float64{
+	0.3588, 0.7044, 0.1368,
+	0.2990, 0.5870, 0.1140,
+	0.2392, 0.4696, 0.0912,
+}
+
+func sepiaMatrixReader() io.ReadCloser {
+	var buf bytes.Buffer
+	// VIPS matrix format: first line is "width height"
+	// then rows of space-separated floats
+	buf.WriteString("3 3\n")
+	for i, v := range sepiaMatrix {
+		if i%3 == 0 && i != 0 {
+			buf.WriteString("\n")
+		} else if i%3 != 0 {
+			buf.WriteString(" ")
+		}
+		buf.WriteString(strconv.FormatFloat(v, 'f', 4, 64))
+	}
+	buf.WriteString("\n")
+	return io.NopCloser(&buf)
+}
+
+func applySepia(img *vips.Image) error {
+	if img.HasAlpha() {
+		if err := img.Flatten(nil); err != nil {
+			return err
+		}
+	}
+
+	matrixSource := vips.NewSource(sepiaMatrixReader())
+	matrixImage, err := vips.NewMatrixloadSource(matrixSource, vips.DefaultMatrixloadSourceOptions())
+	if err != nil {
+		return err
+	}
+	return img.Recomb(matrixImage)
 }
