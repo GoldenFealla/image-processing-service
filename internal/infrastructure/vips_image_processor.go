@@ -67,10 +67,14 @@ func exportImage(img *vips.Image, opts domain.TransformOptions) ([]byte, error) 
 
 	switch format {
 	case domain.FormatPNG:
-		buf, err := img.PngsaveBuffer(nil)
+		params := vips.DefaultPngsaveBufferOptions()
+		params.Q = quality
+		buf, err := img.PngsaveBuffer(params)
 		return buf, err
 	case domain.FormatWebP:
-		buf, err := img.WebpsaveBuffer(nil)
+		params := vips.DefaultWebpsaveBufferOptions()
+		params.Q = quality
+		buf, err := img.WebpsaveBuffer(params)
 		return buf, err
 	default:
 		params := vips.DefaultJpegsaveBufferOptions()
