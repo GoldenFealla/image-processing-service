@@ -102,12 +102,43 @@ func (v *VipsImageProcessor) resize(opts *domain.ResizeOptions) func(*vips.Image
 		if opts == nil {
 			return nil
 		}
-		scaleX := float64(opts.Width) / float64(img.Width())
-		scaleY := float64(opts.Height) / float64(img.Height())
-		scale := min(scaleX, scaleY)
-		if err := img.Resize(scale, vips.DefaultResizeOptions()); err != nil {
-			return fmt.Errorf("failed to resize: %w", err)
+
+		hasWidth := opts.Width > 0
+		hasHeight := opts.Height > 0
+
+		if !hasWidth && !hasHeight {
+			return nil
 		}
+
+		if opts.KeepAspect || (!hasWidth || !hasHeight) {
+			// Scale by whichever dimension is provided
+			// If both provided, scale by the constraining dimension
+			var scale float64
+			switch {
+			case hasWidth && hasHeight:
+				scaleX := float64(opts.Width) / float64(img.Width())
+				scaleY := float64(opts.Height) / float64(img.Height())
+				scale = min(scaleX, scaleY)
+			case hasWidth:
+				scale = float64(opts.Width) / float64(img.Width())
+			case hasHeight:
+				scale = float64(opts.Height) / float64(img.Height())
+			}
+			if err := img.Resize(scale, vips.DefaultResizeOptions()); err != nil {
+				return fmt.Errorf("failed to resize: %w", err)
+			}
+		} else {
+			// Exact resize, ignore aspect ratio
+			hShrink := float64(img.Width()) / float64(opts.Width)
+			vShrink := float64(img.Height()) / float64(opts.Height)
+			if err := img.Reduceh(hShrink, nil); err != nil {
+				return fmt.Errorf("failed to reduce width: %w", err)
+			}
+			if err := img.Reducev(vShrink, nil); err != nil {
+				return fmt.Errorf("failed to reduce height: %w", err)
+			}
+		}
+
 		return nil
 	}
 }

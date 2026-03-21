@@ -59,8 +59,9 @@ const (
 )
 
 type ResizeOptions struct {
-	Width  int `json:"width"`
-	Height int `json:"height"`
+	Width      int  `json:"width"`
+	Height     int  `json:"height"`
+	KeepAspect bool `json:"keep_aspect"`
 }
 
 type CropOptions struct {
