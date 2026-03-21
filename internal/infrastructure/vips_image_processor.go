@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"strconv"
 
@@ -210,43 +211,34 @@ func (v *VipsImageProcessor) watermark(opts *domain.WatermarkOptions) func(*vips
 		if opts == nil {
 			return nil
 		}
-		watermark, err := vips.NewImageFromBuffer([]byte(fmt.Sprintf(
-			`<svg><text opacity="%f">%s</text></svg>`,
-			opts.Opacity, opts.Text,
-		)), nil)
+
+		svg := fmt.Sprintf(
+			`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
+                <text x="0" y="%g" font-size="%g" fill="rgba(255,255,255,%.2f)" font-family="sans-serif">%s</text>
+            </svg>`,
+			int(float64(len(opts.Text))*opts.Size*0.6),
+			int(opts.Size),
+			opts.Size,
+			opts.Size,
+			opts.Opacity,
+			html.EscapeString(opts.Text),
+		)
+
+		watermark, err := vips.NewImageFromBuffer([]byte(svg), nil)
 		if err != nil {
-			return fmt.Errorf("failed to create watermark: %w", err)
+			return fmt.Errorf("create watermark: %w", err)
 		}
 		defer watermark.Close()
 
-		x, y := resolveWatermarkPosition(img, watermark, opts.Position)
-		if err := img.Composite2(
-			watermark,
-			vips.BlendModeOver,
-			&vips.Composite2Options{X: x, Y: y, CompositingSpace: vips.Interpretation(22)},
-		); err != nil {
-			return fmt.Errorf("failed to apply watermark: %w", err)
-		}
-		return nil
+		return img.Composite2(watermark, vips.BlendModeOver, &vips.Composite2Options{
+			X:                opts.X,
+			Y:                opts.Y,
+			CompositingSpace: vips.Interpretation(22),
+		})
 	}
 }
 
 // ========= helper =========
-func resolveWatermarkPosition(img *vips.Image, watermark *vips.Image, position string) (int, int) {
-	switch position {
-	case "top-left":
-		return 10, 10
-	case "top-right":
-		return img.Width() - watermark.Width() - 10, 10
-	case "bottom-left":
-		return 10, img.Height() - watermark.Height() - 10
-	case "bottom-right":
-		return img.Width() - watermark.Width() - 10, img.Height() - watermark.Height() - 10
-	default: // center
-		return (img.Width() - watermark.Width()) / 2, (img.Height() - watermark.Height()) / 2
-	}
-}
-
 var sepiaMatrix = []float64{
 	0.3588, 0.7044, 0.1368,
 	0.2990, 0.5870, 0.1140,

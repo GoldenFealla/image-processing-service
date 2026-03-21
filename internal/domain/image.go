@@ -76,9 +76,11 @@ type RotateOptions struct {
 }
 
 type WatermarkOptions struct {
-	Text     string  `json:"text"`
-	Opacity  float64 `json:"opacity"`  // 0.0 - 1.0
-	Position string  `json:"position"` // top-left, top-right, bottom-left, bottom-right, center
+	Text    string  `json:"text"`
+	Size    float64 `json:"size"`
+	Opacity float64 `json:"opacity"`
+	X       int     `json:"x"`
+	Y       int     `json:"y"`
 }
 
 type CompressOptions struct {
