@@ -113,7 +113,7 @@ func (h *ImageHandler) upload(w http.ResponseWriter, r *http.Request) {
 	image, err := h.imageUsecase.Upload(r.Context(), userID, file)
 	if err != nil {
 		switch {
-		case errors.Is(err, application.ErrUnsupportedImage):
+		case errors.Is(err, domain.ErrUnsupportedImage):
 			http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -162,4 +162,39 @@ func (h *ImageHandler) transform(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ImageHandler) save(w http.ResponseWriter, r *http.Request) {
+	rawID := r.PathValue("id")
+	id, err := uuid.Parse(rawID)
+	if err != nil {
+		http.Error(w, "invalid image id", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
+
+	var opts domain.TransformOptions
+	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		http.Error(w, fmt.Sprintf("decode body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	image, err := h.imageUsecase.Save(r.Context(), userID, id, opts)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
+			http.Error(w, "forbidden", http.StatusForbidden)
+		case errors.Is(err, domain.ErrImageNotFound):
+			http.Error(w, "image not found", http.StatusNotFound)
+		default:
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(image)
 }

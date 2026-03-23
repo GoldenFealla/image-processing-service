@@ -8,7 +8,11 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrImageNotFound = errors.New("image not found")
+var (
+	ErrImageNotFound    = errors.New("image not found")
+	ErrUnsupportedImage = errors.New("unsupported image type")
+	ErrForbidden        = errors.New("forbidden")
+)
 
 // Image represents a domain entity for image processing
 type Image struct {
@@ -28,7 +32,7 @@ type ImageMetadataRepository interface {
 
 type ImageStorageRepository interface {
 	Upload(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error)
-	Replace(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error)
+	Replace(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string, version int) (string, error)
 	Download(ctx context.Context, userID, id uuid.UUID) ([]byte, error)
 	Delete(ctx context.Context, userID, id uuid.UUID) error
 }
@@ -42,6 +46,8 @@ type ImageCache interface {
 	SetOriginal(ctx context.Context, id uuid.UUID, data []byte) error
 	GetTransformed(ctx context.Context, id uuid.UUID, opts TransformOptions) ([]byte, error)
 	SetTransformed(ctx context.Context, id uuid.UUID, opts TransformOptions, data []byte) error
+	DeleteOriginal(ctx context.Context, id uuid.UUID) error
+	DeleteTransformed(ctx context.Context, id uuid.UUID) error
 }
 
 type Format string

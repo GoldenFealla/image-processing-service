@@ -78,7 +78,7 @@ func (r *R2Storage) Delete(ctx context.Context, userID, id uuid.UUID) error {
 }
 
 // infrastructure/r2_storage.go
-func (r *R2Storage) Replace(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string) (string, error) {
+func (r *R2Storage) Replace(ctx context.Context, userID, id uuid.UUID, file io.Reader, contentType string, version int) (string, error) {
 	key := fmt.Sprintf("images/%s/%s", userID.String(), id.String())
 
 	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
@@ -91,7 +91,7 @@ func (r *R2Storage) Replace(ctx context.Context, userID, id uuid.UUID, file io.R
 	if err != nil {
 		return "", fmt.Errorf("failed to replace image: %w", err)
 	}
-	return fmt.Sprintf("%s/%s", r.publicURL, id.String()), nil
+	return fmt.Sprintf("%s/%s?v=%d", r.publicURL, key, version), nil
 }
 
 func (r *R2Storage) Download(ctx context.Context, userID, id uuid.UUID) ([]byte, error) {

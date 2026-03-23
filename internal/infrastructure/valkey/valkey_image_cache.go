@@ -87,3 +87,25 @@ func (c *ImageCache) transformKey(id uuid.UUID, opts domain.TransformOptions) st
 	h.Write(b)
 	return fmt.Sprintf("image:transform:%s:%d", id.String(), h.Sum64())
 }
+
+func (c *ImageCache) DeleteOriginal(ctx context.Context, id uuid.UUID) error {
+	if err := c.client.Del(ctx, c.originalKey(id)).Err(); err != nil {
+		return fmt.Errorf("failed to delete cached image: %w", err)
+	}
+	return nil
+}
+
+func (c *ImageCache) DeleteTransformed(ctx context.Context, id uuid.UUID) error {
+	pattern := fmt.Sprintf("image:transform:%s:*", id.String())
+	keys, err := c.client.Keys(ctx, pattern).Result()
+	if err != nil {
+		return fmt.Errorf("failed to scan transformed cache keys: %w", err)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	if err := c.client.Del(ctx, keys...).Err(); err != nil {
+		return fmt.Errorf("failed to delete transformed cache: %w", err)
+	}
+	return nil
+}

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -20,15 +21,11 @@ var (
 	}
 )
 
-var (
-	ErrUnsupportedImage = errors.New("unsupported image type")
-)
-
 type ProcessImageUseCase interface {
 	Retrieve(ctx context.Context, userID, id uuid.UUID) (*domain.Image, error)
 	List(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error)
 	Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error)
-	Save(ctx context.Context, userID, id uuid.UUID, file multipart.File) error
+	Save(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) (*domain.Image, error)
 	Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
 }
 
@@ -92,7 +89,7 @@ func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, fi
 
 	contentType := http.DetectContentType(buffer)
 	if !allowedImageTypes[contentType] {
-		return nil, ErrUnsupportedImage
+		return nil, domain.ErrUnsupportedImage
 	}
 
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
@@ -130,8 +127,60 @@ func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, fi
 	return newImage, nil
 }
 
-func (pis *ProcessImageService) Save(ctx context.Context, userID, id uuid.UUID, file multipart.File) error {
-	return nil
+func (pis *ProcessImageService) Save(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) (*domain.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	existing, err := pis.metadata.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.OwnerID != userID {
+		return nil, domain.ErrForbidden
+	}
+
+	original, err := pis.cache.GetOriginal(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if original == nil {
+		original, err = pis.storage.Download(ctx, userID, id)
+		if err != nil {
+			return nil, err
+		}
+		go pis.cache.SetOriginal(context.WithoutCancel(ctx), id, original)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	transformed, err := pis.processor.Transform(ctx, original, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	contentType := http.DetectContentType(transformed)
+	url, err := pis.storage.Replace(ctx, userID, id, bytes.NewReader(transformed), contentType, existing.Version+1)
+	if err != nil {
+		return nil, err
+	}
+
+	existing.URL = url
+	existing.Version++
+	if err := pis.metadata.Update(ctx, existing); err != nil {
+		return nil, err
+	}
+
+	// Invalidate caches asynchronously
+	go func() {
+		bgCtx := context.WithoutCancel(ctx)
+		pis.cache.DeleteOriginal(bgCtx, id)
+		pis.cache.DeleteTransformed(bgCtx, id)
+	}()
+
+	return existing, nil
 }
 
 func (pis *ProcessImageService) Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error) {
