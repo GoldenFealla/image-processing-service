@@ -1,6 +1,7 @@
 package presentation
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,12 +13,19 @@ import (
 )
 
 type AuthHandler struct {
-	auth              application.AuthUseCase
-	googleRedirectURL string
+	auth application.AuthUseCase
+
+	oauthState  OAuthStateRepository
+	RedirectURL string
 }
 
-func NewAuthHandler(auth application.AuthUseCase, googleRedirectURL string) *AuthHandler {
-	return &AuthHandler{auth: auth, googleRedirectURL: googleRedirectURL}
+type OAuthStateRepository interface {
+	SaveState(ctx context.Context, state string) error
+	ValidateState(ctx context.Context, state string) (bool, error)
+}
+
+func NewAuthHandler(auth application.AuthUseCase, oauthState OAuthStateRepository, RedirectURL string) *AuthHandler {
+	return &AuthHandler{auth: auth, oauthState: oauthState, RedirectURL: RedirectURL}
 }
 
 func (h *AuthHandler) Routes() http.Handler {
@@ -121,27 +129,32 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 // Google OAuth — redirect user to Google
 func (h *AuthHandler) googleRedirect(w http.ResponseWriter, r *http.Request) {
 	state := uuid.New().String()
-	// store state in cookie or session
-	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Value: state})
-	http.Redirect(w, r, h.auth.GetGoogleAuthURL(state), http.StatusTemporaryRedirect)
+	h.oauthState.SaveState(r.Context(), state)
+	http.Redirect(w, r, h.auth.GetGoogleAuthURL(state), http.StatusFound)
 }
 
 // Google OAuth — handle callback from Google
 func (h *AuthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
-	cookie, _ := r.Cookie("oauth_state")
-	if cookie.Value != r.URL.Query().Get("state") {
+	state := r.URL.Query().Get("state")
+	fmt.Println(state)
+	isValid, err := h.oauthState.ValidateState(r.Context(), state)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("auth failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if !isValid {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
 
-	tokenPairs, err := h.auth.HandleGoogleCallback(r.Context(), r.URL.Query().Get("code"), cookie.Value)
+	tokenPairs, err := h.auth.HandleGoogleCallback(r.Context(), r.URL.Query().Get("code"), state)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("auth failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	setRefeshToken(w, tokenPairs)
-	http.Redirect(w, r, h.googleRedirectURL, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, h.RedirectURL, http.StatusFound)
 }
 
 func clearRefreshToken(w http.ResponseWriter) {

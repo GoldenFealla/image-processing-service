@@ -27,6 +27,7 @@ import (
 var (
 	ImageCacheDB   int = 0
 	SessionStoreDB int = 1
+	OAuthStateDB   int = 1
 )
 
 func main() {
@@ -63,6 +64,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to initialize session store: %v", err)
 	}
+	oauthState, err := valkey.NewAuthStateStore(loadOAuthConfig(OAuthStateDB))
+	if err != nil {
+		log.Fatalf("failed to initialize oauth state: %v", err)
+	}
 
 	imageProcessor := infrastructure.NewVipsImageProcessor()
 
@@ -71,7 +76,7 @@ func main() {
 
 	// === presentation =====
 	imageHandler := presentation.NewImageHandler(processUseCase)
-	userHandler := presentation.NewAuthHandler(authUseCase, os.Getenv("GOOGLE_REDIRECT_URL"))
+	userHandler := presentation.NewAuthHandler(authUseCase, oauthState, os.Getenv("REDIRECT_URL"))
 
 	handler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:4200"},
@@ -119,6 +124,15 @@ func loadPostgresConfig() *pg.PostgresConfig {
 }
 
 func loadCacheConfig(DB int) valkey.ValkeyConfig {
+	return valkey.ValkeyConfig{
+		Addr:     os.Getenv("VALKEY_ADDR"),
+		Password: os.Getenv("VALKEY_PASSWORD"),
+		DB:       DB,
+		TTL:      30 * time.Minute,
+	}
+}
+
+func loadOAuthConfig(DB int) valkey.ValkeyConfig {
 	return valkey.ValkeyConfig{
 		Addr:     os.Getenv("VALKEY_ADDR"),
 		Password: os.Getenv("VALKEY_PASSWORD"),

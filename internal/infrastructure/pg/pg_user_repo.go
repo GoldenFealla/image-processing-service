@@ -35,7 +35,7 @@ func (r *PostgresUserRepository) Close() {
 
 func (r *PostgresUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, username, email, password_hash, provider, provider_id, created_at
+		SELECT id, username, email, password_hash, created_at
 		FROM users WHERE id = $1
 	`
 	rows, err := r.db.Query(ctx, query, id)
