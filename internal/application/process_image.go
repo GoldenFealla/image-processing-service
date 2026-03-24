@@ -24,7 +24,7 @@ var (
 type ProcessImageUseCase interface {
 	Retrieve(ctx context.Context, userID, id uuid.UUID) (*domain.Image, error)
 	List(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error)
-	Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error)
+	Upload(ctx context.Context, userID uuid.UUID, file multipart.File, name string) (*domain.Image, error)
 	Save(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) (*domain.Image, error)
 	Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
 }
@@ -76,7 +76,7 @@ func (pis *ProcessImageService) List(ctx context.Context, userID uuid.UUID) ([]*
 	return images, nil
 }
 
-func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, file multipart.File) (*domain.Image, error) {
+func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, file multipart.File, name string) (*domain.Image, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -112,6 +112,7 @@ func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, fi
 
 	newImage := &domain.Image{
 		ID:      newID,
+		Name:    name,
 		URL:     url,
 		Version: 0,
 		OwnerID: userID,

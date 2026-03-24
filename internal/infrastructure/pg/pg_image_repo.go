@@ -30,12 +30,14 @@ func NewPostgresImageRepository(cfg *PostgresConfig) (*PostgresImageRepository, 
 }
 
 func (pir *PostgresImageRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.Image, error) {
-	row := pir.db.QueryRow(ctx,
-		`SELECT id, url, version, owner_id FROM images WHERE id = $1`, id,
+	rows, err := pir.db.Query(ctx,
+		`SELECT id, name, url, version, owner_id, updated_at FROM images WHERE id = $1`, id,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find image: %w", err)
+	}
 
-	image := &domain.Image{}
-	err := row.Scan(&image.ID, &image.URL, &image.Version, &image.OwnerID)
+	image, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[domain.Image])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrImageNotFound
@@ -68,8 +70,8 @@ func (pir *PostgresImageRepository) FindListByOwnerID(ctx context.Context, userI
 
 func (pir *PostgresImageRepository) Update(ctx context.Context, image *domain.Image) error {
 	_, err := pir.db.Exec(ctx,
-		`UPDATE images SET url = $1, version = $2 WHERE id = $3`,
-		image.URL, image.Version, image.ID,
+		`UPDATE images SET name = $1, url = $2, version = $3, updated_at = NOW() WHERE id = $4`,
+		image.Name, image.URL, image.Version, image.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update image: %w", err)
@@ -79,8 +81,8 @@ func (pir *PostgresImageRepository) Update(ctx context.Context, image *domain.Im
 
 func (pir *PostgresImageRepository) Save(ctx context.Context, image *domain.Image) error {
 	_, err := pir.db.Exec(ctx,
-		`INSERT INTO images (id, url, version, owner_id) VALUES ($1, $2, $3, $4)`,
-		image.ID, image.URL, image.Version, image.OwnerID,
+		`INSERT INTO images (id, name, url, version, owner_id, updated_at) VALUES ($1, $2, $3, $4, $5, NOW())`,
+		image.ID, image.Name, image.URL, image.Version, image.OwnerID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save image: %w", err)

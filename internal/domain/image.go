@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -16,10 +17,12 @@ var (
 
 // Image represents a domain entity for image processing
 type Image struct {
-	ID      uuid.UUID `db:"id"       json:"id"`
-	URL     string    `db:"url"      json:"url"`
-	Version int       `db:"version"  json:"version"`
-	OwnerID uuid.UUID `db:"owner_id" json:"owner_id"`
+	ID       uuid.UUID `db:"id"       json:"id"`
+	Name     string    `db:"name"     json:"name"`
+	URL      string    `db:"url"      json:"url"`
+	Version  int       `db:"version"  json:"version"`
+	OwnerID  uuid.UUID `db:"owner_id" json:"owner_id"`
+	UpdateAt time.Time `db:"updated_at"  json:"updated_at"`
 }
 
 // ImageRepository defines the interface for image storage

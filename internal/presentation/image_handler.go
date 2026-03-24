@@ -103,14 +103,14 @@ func (h *ImageHandler) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("image")
+	file, header, err := r.FormFile("image")
 	if err != nil {
 		http.Error(w, "missing or invalid 'image' field in form", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	image, err := h.imageUsecase.Upload(r.Context(), userID, file)
+	image, err := h.imageUsecase.Upload(r.Context(), userID, file, header.Filename)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrUnsupportedImage):
