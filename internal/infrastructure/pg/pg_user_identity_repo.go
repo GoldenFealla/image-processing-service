@@ -50,7 +50,7 @@ func (r *PostgresUserIdentityRepository) FindByProvider(ctx context.Context, Pro
 
 func (r *PostgresUserIdentityRepository) Create(ctx context.Context, userID uuid.UUID, Provider string, ProviderID string) error {
 	query := `
-		INSERT INTO users (user_id, provider, provider_id, created_at)
+		INSERT INTO user_identities (user_id, provider, provider_id, created_at)
 		VALUES ($1, $2, $3, NOW())
 	`
 	_, err := r.db.Exec(ctx, query, userID, Provider, ProviderID)

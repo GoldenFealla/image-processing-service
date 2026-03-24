@@ -71,7 +71,7 @@ func main() {
 
 	// === presentation =====
 	imageHandler := presentation.NewImageHandler(processUseCase)
-	userHandler := presentation.NewAuthHandler(authUseCase)
+	userHandler := presentation.NewAuthHandler(authUseCase, os.Getenv("GOOGLE_REDIRECT_URL"))
 
 	handler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:4200"},
@@ -145,7 +145,7 @@ func loadGoogleOAuthConfig() *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		RedirectURL:  "https://yourapp.com/auth/google/callback",
+		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile",

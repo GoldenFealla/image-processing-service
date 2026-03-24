@@ -198,12 +198,15 @@ func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state stri
 			return nil, fmt.Errorf("failed to find or create user: %w", err)
 		}
 
-		user.Email = info.Email
-		user.Username = info.Name
+		user = &domain.User{
+			Email:    info.Email,
+			Username: info.Name,
+		}
 
 		if err = s.users.Create(ctx, user); err != nil {
 			return nil, fmt.Errorf("failed to create user: %w", err)
 		}
+		fmt.Println(user.ID)
 		if err = s.identities.Create(ctx, user.ID, info.Provider, info.ProviderID); err != nil {
 			return nil, fmt.Errorf("failed to create identity: %w", err)
 		}

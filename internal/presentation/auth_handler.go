@@ -2,7 +2,9 @@ package presentation
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
@@ -10,11 +12,12 @@ import (
 )
 
 type AuthHandler struct {
-	auth application.AuthUseCase
+	auth              application.AuthUseCase
+	googleRedirectURL string
 }
 
-func NewAuthHandler(auth application.AuthUseCase) *AuthHandler {
-	return &AuthHandler{auth: auth}
+func NewAuthHandler(auth application.AuthUseCase, googleRedirectURL string) *AuthHandler {
+	return &AuthHandler{auth: auth, googleRedirectURL: googleRedirectURL}
 }
 
 func (h *AuthHandler) Routes() http.Handler {
@@ -100,19 +103,18 @@ func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		http.Error(w, "missing refresh token", http.StatusUnauthorized)
 		return
 	}
 
-	if err := h.auth.Logout(r.Context(), body.RefreshToken); err != nil {
+	if err := h.auth.Logout(r.Context(), cookie.Value); err != nil {
 		http.Error(w, "logout failed", http.StatusInternalServerError)
 		return
 	}
 
+	clearRefreshToken(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -134,25 +136,41 @@ func (h *AuthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
 
 	tokenPairs, err := h.auth.HandleGoogleCallback(r.Context(), r.URL.Query().Get("code"), cookie.Value)
 	if err != nil {
-		http.Error(w, "auth failed", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("auth failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// redirect frontend with token
-	http.Redirect(w, r, "https://yourapp.com/auth/success?token="+tokenPairs.AccessToken, http.StatusTemporaryRedirect)
+	setRefeshToken(w, tokenPairs)
+	http.Redirect(w, r, h.googleRedirectURL, http.StatusTemporaryRedirect)
 }
 
-func writeTokens(w http.ResponseWriter, tokens *application.TokenPair) {
+func clearRefreshToken(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+	})
+}
+
+func setRefeshToken(w http.ResponseWriter, tokens *application.TokenPair) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    tokens.RefreshToken,
 		HttpOnly: true,
 		Secure:   false, // Change later
 		SameSite: http.SameSiteStrictMode,
-		Path:     "/auth/refresh",  // only sent to refresh endpoint
+		Path:     "/auth",          // only sent to auth endpoint
 		MaxAge:   7 * 24 * 60 * 60, // 7 days in seconds
 	})
+}
 
+func writeTokens(w http.ResponseWriter, tokens *application.TokenPair) {
+	setRefeshToken(w, tokens)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"access_token": tokens.AccessToken,
