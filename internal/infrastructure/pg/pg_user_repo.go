@@ -2,10 +2,11 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
@@ -32,38 +33,62 @@ func (r *PostgresUserRepository) Close() {
 	r.db.Close()
 }
 
-func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
-	user := &domain.User{}
-	err := r.db.QueryRow(ctx, `
-		SELECT id, email, password_hash, provider, provider_id, created_at
-		FROM users WHERE email = $1
-	`, email).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Provider, &user.ProviderID, &user.CreatedAt)
+func (r *PostgresUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	query := `
+		SELECT id, username, email, password_hash, provider, provider_id, created_at
+		FROM users WHERE id = $1
+	`
+	rows, err := r.db.Query(ctx, query, id)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, errors.Join(domain.ErrUserNotFound, err)
+	}
+	user, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[domain.User])
+	if err != nil {
+		return nil, errors.Join(domain.ErrUserNotFound, err)
 	}
 	return user, nil
 }
 
-func (r *PostgresUserRepository) FindByProviderID(ctx context.Context, provider, providerID string) (*domain.User, error) {
-	user := &domain.User{}
-	err := r.db.QueryRow(ctx, `
-		SELECT id, email, password_hash, provider, provider_id, created_at
-		FROM users WHERE provider = $1 AND provider_id = $2
-	`, provider, providerID).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Provider, &user.ProviderID, &user.CreatedAt)
+func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+	query := `
+		SELECT id, username, email, password_hash, created_at
+		FROM users WHERE email = $1
+	`
+	rows, err := r.db.Query(ctx, query, email)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, errors.Join(domain.ErrUserNotFound, err)
+	}
+	user, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[domain.User])
+	if err != nil {
+		return nil, errors.Join(domain.ErrUserNotFound, err)
+	}
+	return user, nil
+}
+
+func (r *PostgresUserRepository) FindByUsernameOrEmail(ctx context.Context, usernameOrEmail string) (*domain.User, error) {
+	query := `
+		SELECT id, username, email, password_hash, created_at
+		FROM users WHERE username = $1 OR email = $2
+	`
+	rows, err := r.db.Query(ctx, query, usernameOrEmail, usernameOrEmail)
+	if err != nil {
+		return nil, errors.Join(domain.ErrUserNotFound, err)
+	}
+	user, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[domain.User])
+	if err != nil {
+		return nil, errors.Join(domain.ErrUserNotFound, err)
 	}
 	return user, nil
 }
 
 func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) error {
 	user.ID = uuid.Must(uuid.NewV7())
-	user.CreatedAt = time.Now()
 
-	_, err := r.db.Exec(ctx, `
-		INSERT INTO users (id, email, password_hash, provider, provider_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, user.ID, user.Email, user.PasswordHash, user.Provider, user.ProviderID, user.CreatedAt)
+	query := `
+		INSERT INTO users (id, username, email, password_hash, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+	`
+	_, err := r.db.Exec(ctx, query, user.ID, user.Username, user.Email, user.PasswordHash)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}

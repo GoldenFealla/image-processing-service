@@ -77,8 +77,9 @@ func (h *ImageHandler) list(w http.ResponseWriter, r *http.Request) {
 	images, err := h.imageUsecase.List(r.Context(), userID)
 	if err != nil {
 		switch {
+		// False alarm
 		case errors.Is(err, domain.ErrImageNotFound):
-			http.Error(w, "user doesn't have image", http.StatusNotFound)
+			// http.Error(w, "user doesn't have image", http.StatusNotFound)
 		default:
 			log.Println(err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)

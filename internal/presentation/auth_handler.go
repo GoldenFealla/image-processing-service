@@ -5,13 +5,15 @@ import (
 	"net/http"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
+	"github.com/GoldenFealla/image-processing-service/internal/domain"
+	"github.com/google/uuid"
 )
 
 type AuthHandler struct {
-	auth *application.AuthService
+	auth application.AuthUseCase
 }
 
-func NewAuthHandler(auth *application.AuthService) *AuthHandler {
+func NewAuthHandler(auth application.AuthUseCase) *AuthHandler {
 	return &AuthHandler{auth: auth}
 }
 
@@ -25,8 +27,8 @@ func (h *AuthHandler) Routes() http.Handler {
 	mux.HandleFunc("POST /refresh", h.refresh)
 	mux.HandleFunc("POST /logout", h.logout)
 
-	// mux.HandleFunc("GET /google", h.googleRedirect)
-	// mux.HandleFunc("GET /google/callback", h.googleCallback)
+	mux.HandleFunc("GET /google", h.googleRedirect)
+	mux.HandleFunc("GET /google/callback", h.googleCallback)
 
 	return mux
 }
@@ -50,16 +52,13 @@ func (h *AuthHandler) check(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
+	var body *domain.RegisterForm
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
-	tokens, err := h.auth.Register(r.Context(), body.Email, body.Password)
+	tokens, err := h.auth.Register(r.Context(), body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -69,16 +68,13 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
+	var body *domain.LoginForm
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
-	tokens, err := h.auth.Login(r.Context(), body.Email, body.Password)
+	tokens, err := h.auth.Login(r.Context(), body)
 	if err != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -121,27 +117,30 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // Google OAuth — redirect user to Google
-// func (h *AuthHandler) googleRedirect(w http.ResponseWriter, r *http.Request) {
-// 	url := h.auth.GoogleAuthURL()
-// 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-// }
+func (h *AuthHandler) googleRedirect(w http.ResponseWriter, r *http.Request) {
+	state := uuid.New().String()
+	// store state in cookie or session
+	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Value: state})
+	http.Redirect(w, r, h.auth.GetGoogleAuthURL(state), http.StatusTemporaryRedirect)
+}
 
 // Google OAuth — handle callback from Google
-// func (h *AuthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
-// 	code := r.URL.Query().Get("code")
-// 	if code == "" {
-// 		http.Error(w, "missing code", http.StatusBadRequest)
-// 		return
-// 	}
+func (h *AuthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
+	cookie, _ := r.Cookie("oauth_state")
+	if cookie.Value != r.URL.Query().Get("state") {
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
 
-// 	tokens, err := h.auth.HandleGoogleCallback(r.Context(), code)
-// 	if err != nil {
-// 		http.Error(w, "google auth failed", http.StatusUnauthorized)
-// 		return
-// 	}
+	tokenPairs, err := h.auth.HandleGoogleCallback(r.Context(), r.URL.Query().Get("code"), cookie.Value)
+	if err != nil {
+		http.Error(w, "auth failed", http.StatusInternalServerError)
+		return
+	}
 
-// 	writeTokens(w, tokens)
-// }
+	// redirect frontend with token
+	http.Redirect(w, r, "https://yourapp.com/auth/success?token="+tokenPairs.AccessToken, http.StatusTemporaryRedirect)
+}
 
 func writeTokens(w http.ResponseWriter, tokens *application.TokenPair) {
 	http.SetCookie(w, &http.Cookie{

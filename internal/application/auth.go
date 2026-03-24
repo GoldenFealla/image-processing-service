@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,10 +17,15 @@ import (
 )
 
 type UserRepository interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
-	FindByProviderID(ctx context.Context, provider, providerID string) (*domain.User, error)
-
+	FindByUsernameOrEmail(ctx context.Context, usernameOrEmail string) (*domain.User, error)
 	Create(ctx context.Context, user *domain.User) error
+}
+
+type UserIdentityRepository interface {
+	Create(ctx context.Context, userID uuid.UUID, Provider string, ProviderID string) error
+	FindByProvider(ctx context.Context, Provider string, ProviderID string) (*domain.UserIdentity, error)
 }
 
 type SessionRepository interface {
@@ -35,19 +41,41 @@ type AuthConfig struct {
 
 	PublicKey  *ecdsa.PublicKey
 	PrivateKey *ecdsa.PrivateKey
+}
 
-	GoogleClientID     string
-	GoogleClientSecret string
+type AuthUseCase interface {
+	Login(ctx context.Context, form *domain.LoginForm) (*TokenPair, error)
+	Logout(ctx context.Context, refreshToken string) error
+	Refresh(ctx context.Context, refreshToken string) (*TokenPair, error)
+	Register(ctx context.Context, form *domain.RegisterForm) (*TokenPair, error)
+	ValidateAccessToken(tokenStr string) (uuid.UUID, error)
+
+	GetGoogleAuthURL(state string) string
+	HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, error)
 }
 
 type AuthService struct {
-	users   UserRepository
-	session SessionRepository
-	config  AuthConfig
+	users      UserRepository
+	identities UserIdentityRepository
+	session    SessionRepository
+	config     AuthConfig
+	oauth      domain.OAuthRepository
 }
 
-func NewAuthService(users UserRepository, session SessionRepository, config AuthConfig) *AuthService {
-	return &AuthService{users: users, session: session, config: config}
+func NewAuthService(
+	users UserRepository,
+	identities UserIdentityRepository,
+	session SessionRepository,
+	config AuthConfig,
+	oauth domain.OAuthRepository,
+) *AuthService {
+	return &AuthService{
+		users:      users,
+		identities: identities,
+		session:    session,
+		config:     config,
+		oauth:      oauth,
+	}
 }
 
 type TokenPair struct {
@@ -66,29 +94,29 @@ var (
 )
 
 // === Local ===
-func (s *AuthService) Login(ctx context.Context, email, password string) (*TokenPair, error) {
-	user, err := s.users.FindByEmail(ctx, email)
+func (s *AuthService) Login(ctx context.Context, form *domain.LoginForm) (*TokenPair, error) {
+	user, err := s.users.FindByUsernameOrEmail(ctx, form.UsernameOrEmail)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(form.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
 	return s.issueTokens(ctx, user.ID)
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password string) (*TokenPair, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+func (s *AuthService) Register(ctx context.Context, form *domain.RegisterForm) (*TokenPair, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(form.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 
 	user := &domain.User{
-		Email:        email,
+		Username:     form.Username,
+		Email:        form.Email,
 		PasswordHash: string(hash),
-		Provider:     "local",
 	}
 
 	if err := s.users.Create(ctx, user); err != nil {
@@ -148,21 +176,50 @@ func (s *AuthService) ValidateAccessToken(tokenStr string) (uuid.UUID, error) {
 }
 
 // === Google OAuth ===
-func (s *AuthService) LoginWithGoogle(ctx context.Context, googleUserID, email string) (*TokenPair, error) {
-	user, err := s.users.FindByProviderID(ctx, "google", googleUserID)
+func (s *AuthService) GetGoogleAuthURL(state string) string {
+	return s.oauth.GetAuthURL(state)
+}
+
+func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, error) {
+	info, err := s.oauth.ExchangeCode(ctx, code)
 	if err != nil {
-		// first time, create user
-		user = &domain.User{
-			Email:      email,
-			Provider:   "google",
-			ProviderID: googleUserID,
+		return nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+
+	identity, err := s.identities.FindByProvider(ctx, info.Provider, info.ProviderID)
+	if err != nil && !errors.Is(err, domain.ErrIdentityNotFound) {
+		return nil, fmt.Errorf("failed to find identity: %w", err)
+	}
+
+	var user *domain.User
+	if identity == nil {
+		user, err = s.users.FindByEmail(ctx, info.Email)
+		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+			return nil, fmt.Errorf("failed to find or create user: %w", err)
 		}
-		if err := s.users.Create(ctx, user); err != nil {
-			return nil, err
+
+		user.Email = info.Email
+		user.Username = info.Name
+
+		if err = s.users.Create(ctx, user); err != nil {
+			return nil, fmt.Errorf("failed to create user: %w", err)
+		}
+		if err = s.identities.Create(ctx, user.ID, info.Provider, info.ProviderID); err != nil {
+			return nil, fmt.Errorf("failed to create identity: %w", err)
+		}
+	} else {
+		user, err = s.users.FindByID(ctx, identity.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find user: %w", err)
 		}
 	}
 
-	return s.issueTokens(ctx, user.ID)
+	tokenPairs, err := s.issueTokens(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	return tokenPairs, nil
 }
 
 // === Internal helpers ===

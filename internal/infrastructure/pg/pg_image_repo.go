@@ -49,7 +49,7 @@ func (pir *PostgresImageRepository) FindByID(ctx context.Context, id uuid.UUID) 
 
 func (pir *PostgresImageRepository) FindListByOwnerID(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error) {
 	rows, err := pir.db.Query(ctx,
-		`SELECT id, url, version, owner_id FROM images WHERE owner_id = $1`, userID,
+		`SELECT id, name, url, version, owner_id, updated_at FROM images WHERE owner_id = $1`, userID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query images: %w", err)

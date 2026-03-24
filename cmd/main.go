@@ -9,11 +9,15 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 
 	"github.com/GoldenFealla/image-processing-service/internal/application"
 	"github.com/GoldenFealla/image-processing-service/internal/infrastructure"
+	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/oauth"
 	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/pg"
 	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/valkey"
 	"github.com/GoldenFealla/image-processing-service/internal/middleware"
@@ -45,6 +49,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to initialize user repository: %v", err)
 	}
+	userIdentityRepo, err := pg.NewPostgresUserIdentityRepository(loadPostgresConfig())
+	if err != nil {
+		log.Fatalf("failed to initialize user repository: %v", err)
+	}
+	googleOAuthRepo := oauth.NewGoogleOAuthRepository(loadGoogleOAuthConfig())
 
 	imageCache, err := valkey.NewImageCache(loadCacheConfig(ImageCacheDB))
 	if err != nil {
@@ -58,7 +67,7 @@ func main() {
 	imageProcessor := infrastructure.NewVipsImageProcessor()
 
 	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo, imageProcessor, imageCache)
-	authUseCase := application.NewAuthService(userRepo, sessionStore, loadAuthConfig())
+	authUseCase := application.NewAuthService(userRepo, userIdentityRepo, sessionStore, loadAuthConfig(), googleOAuthRepo)
 
 	// === presentation =====
 	imageHandler := presentation.NewImageHandler(processUseCase)
@@ -88,6 +97,7 @@ func main() {
 	}
 }
 
+// Storage and Memory
 func loadR2Config() *infrastructure.R2StorageConfig {
 	return &infrastructure.R2StorageConfig{
 		AccountID:       os.Getenv("R2_ACCOUNT_ID"),
@@ -117,6 +127,7 @@ func loadCacheConfig(DB int) valkey.ValkeyConfig {
 	}
 }
 
+// Auth
 func loadAuthConfig() application.AuthConfig {
 	privateKey, _ := loadECPrivateKey("ec256_private.pem")
 	publicKey, _ := loadECPublicKey("ec256_public.pem")
@@ -127,9 +138,19 @@ func loadAuthConfig() application.AuthConfig {
 		RefreshTokenTTL: 7 * 24 * time.Hour,
 		PrivateKey:      privateKey,
 		PublicKey:       publicKey,
-		// GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		// GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		// GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+	}
+}
+
+func loadGoogleOAuthConfig() *oauth2.Config {
+	return &oauth2.Config{
+		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURL:  "https://yourapp.com/auth/google/callback",
+		Scopes: []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		},
+		Endpoint: google.Endpoint,
 	}
 }
 
