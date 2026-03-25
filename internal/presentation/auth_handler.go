@@ -72,7 +72,7 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeTokens(w, tokens)
+	writeTokens(w, r, tokens)
 }
 
 func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +88,7 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeTokens(w, tokens)
+	writeTokens(w, r, tokens)
 }
 
 func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +104,7 @@ func (h *AuthHandler) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeTokens(w, tokens)
+	writeTokens(w, r, tokens)
 }
 
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +119,7 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clearRefreshToken(w)
+	clearRefreshToken(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -150,7 +150,7 @@ func (h *AuthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefeshToken(w, tokenPairs)
+	setRefeshToken(w, r, tokenPairs)
 	http.Redirect(w, r, h.RedirectURL, http.StatusFound)
 }
 
@@ -181,37 +181,46 @@ func (h *AuthHandler) githubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setRefeshToken(w, tokenPairs)
+	setRefeshToken(w, r, tokenPairs)
 	http.Redirect(w, r, h.RedirectURL, http.StatusFound)
 }
 
-func clearRefreshToken(w http.ResponseWriter) {
+func isRequestSecure(r *http.Request) bool {
+	// Check if the protocol is https or if Cloudflare/Nginx sent the header
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+func clearRefreshToken(w http.ResponseWriter, r *http.Request) {
+	secureFlag := isRequestSecure(r)
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secureFlag,
 		SameSite: http.SameSiteLaxMode,
-		Path:     "/",
+		Path:     "/auth",
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 	})
 }
 
-func setRefeshToken(w http.ResponseWriter, tokens *application.TokenPair) {
+func setRefeshToken(w http.ResponseWriter, r *http.Request, tokens *application.TokenPair) {
+	secureFlag := isRequestSecure(r)
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    tokens.RefreshToken,
 		HttpOnly: true,
-		Secure:   false, // Change later
+		Secure:   secureFlag,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/auth",          // only sent to auth endpoint
 		MaxAge:   7 * 24 * 60 * 60, // 7 days in seconds
 	})
 }
 
-func writeTokens(w http.ResponseWriter, tokens *application.TokenPair) {
-	setRefeshToken(w, tokens)
+func writeTokens(w http.ResponseWriter, r *http.Request, tokens *application.TokenPair) {
+	setRefeshToken(w, r, tokens)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"access_token": tokens.AccessToken,
