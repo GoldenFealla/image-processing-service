@@ -16,7 +16,6 @@ var (
 type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*User, error)
 	FindByEmail(ctx context.Context, email string) (*User, error)
-	FindByUsernameOrEmail(ctx context.Context, usernameOrEmail string) (*User, error)
 	Create(ctx context.Context, user *User) error
 }
 
@@ -27,8 +26,9 @@ type UserIdentityRepository interface {
 
 type User struct {
 	ID           uuid.UUID `db:"id"`
-	Username     string    `db:"username"`
+	Name         string    `db:"name"`
 	Email        string    `db:"email"`
+	Picture      string    `db:"picture"`
 	PasswordHash string    `db:"password_hash"`
 	CreatedAt    time.Time `db:"created_at"`
 }
@@ -42,12 +42,12 @@ type UserIdentity struct {
 }
 
 type LoginForm struct {
-	UsernameOrEmail string `db:"username_or_password"`
-	Password        string `db:"password"`
+	Email    string `db:"email"`
+	Password string `db:"password"`
 }
 
 type RegisterForm struct {
-	Username string `db:"username"`
+	Name     string `db:"name"`
 	Email    string `db:"email"`
 	Password string `db:"password"`
 }

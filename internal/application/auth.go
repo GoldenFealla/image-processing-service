@@ -74,7 +74,7 @@ var (
 
 // === Local ===
 func (s *AuthService) Login(ctx context.Context, form *domain.LoginForm) (*TokenPair, error) {
-	user, err := s.users.FindByUsernameOrEmail(ctx, form.UsernameOrEmail)
+	user, err := s.users.FindByEmail(ctx, form.Email)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -93,7 +93,7 @@ func (s *AuthService) Register(ctx context.Context, form *domain.RegisterForm) (
 	}
 
 	user := &domain.User{
-		Username:     form.Username,
+		Name:         form.Name,
 		Email:        form.Email,
 		PasswordHash: string(hash),
 	}
@@ -280,8 +280,8 @@ func (s *AuthService) findOrCreateUser(ctx context.Context, info *domain.OAuthUs
 	}
 
 	user = &domain.User{
-		Email:    info.Email,
-		Username: info.Name,
+		Email: info.Email,
+		Name:  info.Name,
 	}
 	if err = s.users.Create(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
