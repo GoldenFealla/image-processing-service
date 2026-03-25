@@ -45,9 +45,10 @@ func (g *GoogleOAuthRepository) ExchangeCode(ctx context.Context, code string) (
 	}
 
 	var raw struct {
-		ID    string `json:"id"`
-		Email string `json:"email"`
-		Name  string `json:"name"`
+		ID      string `json:"id"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Picture string `json:"picture"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse user info: %w", err)
@@ -57,6 +58,7 @@ func (g *GoogleOAuthRepository) ExchangeCode(ctx context.Context, code string) (
 		ProviderID: raw.ID,
 		Email:      raw.Email,
 		Name:       raw.Name,
+		Picture:    raw.Picture,
 		Provider:   "google",
 	}, nil
 }

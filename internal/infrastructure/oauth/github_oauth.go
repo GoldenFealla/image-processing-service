@@ -47,9 +47,10 @@ func (g *GithubOAuthRepository) ExchangeCode(ctx context.Context, code string) (
 	}
 
 	var raw struct {
-		ID    int    `json:"id"`
-		Name  string `json:"name"`
-		Email string `json:"email"`
+		ID        int    `json:"id"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		AvatarURL string `json:"avatar_url"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse user info: %w", err)
@@ -69,6 +70,7 @@ func (g *GithubOAuthRepository) ExchangeCode(ctx context.Context, code string) (
 		ProviderID: strconv.Itoa(raw.ID),
 		Email:      email,
 		Name:       raw.Name,
+		Picture:    raw.AvatarURL,
 		Provider:   "github",
 	}, nil
 }

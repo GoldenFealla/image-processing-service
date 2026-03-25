@@ -33,6 +33,22 @@ type User struct {
 	CreatedAt    time.Time `db:"created_at"`
 }
 
+func (u *User) ToJWTUser() UserJWT {
+	return UserJWT{
+		ID:      u.ID,
+		Name:    u.Name,
+		Email:   u.Email,
+		Picture: u.Picture,
+	}
+}
+
+type UserJWT struct {
+	ID      uuid.UUID
+	Name    string
+	Email   string
+	Picture string
+}
+
 type UserIdentity struct {
 	ID         uuid.UUID `db:"id"`
 	UserID     uuid.UUID `db:"user_id"`

@@ -83,7 +83,7 @@ func (s *AuthService) Login(ctx context.Context, form *domain.LoginForm) (*Token
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.issueTokens(ctx, user.ID)
+	return s.issueTokens(ctx, user.ToJWTUser())
 }
 
 func (s *AuthService) Register(ctx context.Context, form *domain.RegisterForm) (*TokenPair, error) {
@@ -102,7 +102,7 @@ func (s *AuthService) Register(ctx context.Context, form *domain.RegisterForm) (
 		return nil, err
 	}
 
-	return s.issueTokens(ctx, user.ID)
+	return s.issueTokens(ctx, user.ToJWTUser())
 }
 
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenPair, error) {
@@ -115,7 +115,12 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenP
 		return nil, err
 	}
 
-	return s.issueTokens(ctx, userID)
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find user: %w", err)
+	}
+
+	return s.issueTokens(ctx, user.ToJWTUser())
 }
 
 func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
@@ -170,7 +175,7 @@ func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state stri
 		return nil, fmt.Errorf("failed to link user: %w", err)
 	}
 
-	tokenPairs, err := s.issueTokens(ctx, user.ID)
+	tokenPairs, err := s.issueTokens(ctx, user.ToJWTUser())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -194,7 +199,7 @@ func (s *AuthService) HandleGithubCallback(ctx context.Context, code, state stri
 		return nil, fmt.Errorf("failed to link user: %w", err)
 	}
 
-	tokenPairs, err := s.issueTokens(ctx, user.ID)
+	tokenPairs, err := s.issueTokens(ctx, user.ToJWTUser())
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -203,8 +208,8 @@ func (s *AuthService) HandleGithubCallback(ctx context.Context, code, state stri
 }
 
 // === Internal helpers ===
-func (s *AuthService) issueTokens(ctx context.Context, userID uuid.UUID) (*TokenPair, error) {
-	accessToken, err := s.generateAccessToken(userID)
+func (s *AuthService) issueTokens(ctx context.Context, user domain.UserJWT) (*TokenPair, error) {
+	accessToken, err := s.generateAccessToken(user)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +219,10 @@ func (s *AuthService) issueTokens(ctx context.Context, userID uuid.UUID) (*Token
 		return nil, err
 	}
 
+	fmt.Println(user.ID)
+
 	expiry := time.Now().Add(s.config.RefreshTokenTTL)
-	if err := s.session.SaveRefreshToken(ctx, userID, refreshToken, expiry); err != nil {
+	if err := s.session.SaveRefreshToken(ctx, user.ID, refreshToken, expiry); err != nil {
 		return nil, err
 	}
 
@@ -225,11 +232,14 @@ func (s *AuthService) issueTokens(ctx context.Context, userID uuid.UUID) (*Token
 	}, nil
 }
 
-func (s *AuthService) generateAccessToken(userID uuid.UUID) (string, error) {
+func (s *AuthService) generateAccessToken(user domain.UserJWT) (string, error) {
 	claims := jwt.MapClaims{
-		"sub": userID,
-		"exp": time.Now().Add(s.config.AccessTokenTTL).Unix(),
-		"iat": time.Now().Unix(),
+		"sub":     user.ID,
+		"email":   user.Email,
+		"name":    user.Name,
+		"picture": user.Picture,
+		"exp":     time.Now().Add(s.config.AccessTokenTTL).Unix(),
+		"iat":     time.Now().Unix(),
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodES256, claims).SignedString(s.config.PrivateKey)
 }
@@ -280,8 +290,9 @@ func (s *AuthService) findOrCreateUser(ctx context.Context, info *domain.OAuthUs
 	}
 
 	user = &domain.User{
-		Email: info.Email,
-		Name:  info.Name,
+		Email:   info.Email,
+		Name:    info.Name,
+		Picture: info.Picture,
 	}
 	if err = s.users.Create(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)

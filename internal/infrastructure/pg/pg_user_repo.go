@@ -35,7 +35,7 @@ func (r *PostgresUserRepository) Close() {
 
 func (r *PostgresUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, name, email, password_hash, created_at
+		SELECT id, name, email, password_hash, picture, created_at
 		FROM users WHERE id = $1
 	`
 	rows, err := r.db.Query(ctx, query, id)
@@ -51,7 +51,7 @@ func (r *PostgresUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*d
 
 func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, name, email, password_hash, created_at
+		SELECT id, name, email, password_hash, picture, created_at
 		FROM users WHERE email = $1
 	`
 	rows, err := r.db.Query(ctx, query, email)
@@ -69,10 +69,10 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 	user.ID = uuid.Must(uuid.NewV7())
 
 	query := `
-		INSERT INTO users (id, name, email, password_hash, created_at)
-		VALUES ($1, $2, $3, $4, NOW())
+		INSERT INTO users (id, name, email, password_hash, picture, created_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())
 	`
-	_, err := r.db.Exec(ctx, query, user.ID, user.Name, user.Email, user.PasswordHash)
+	_, err := r.db.Exec(ctx, query, user.ID, user.Name, user.Email, user.PasswordHash, user.Picture)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
