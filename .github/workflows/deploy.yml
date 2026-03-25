@@ -53,12 +53,5 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           script: |
             docker pull ghcr.io/goldenfealla/image-service:latest
-            docker stop image-service || true
-            docker rm image-service || true
-            docker run -d \
-              --name image-service \
-              --network proxy-network \
-              --env-file ~/services/image-service/.env \
-              --restart unless-stopped \
-              -p 8081:8081 \
-              ghcr.io/goldenfealla/image-service:latest
+            cd ~/services/reverse-proxy
+            docker compose up -d --force-recreate image-service
