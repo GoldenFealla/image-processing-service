@@ -199,7 +199,7 @@ func clearRefreshToken(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Secure:   secureFlag,
 		SameSite: http.SameSiteLaxMode,
-		Path:     "/auth",
+		Path:     "/",
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 	})
@@ -215,7 +215,7 @@ func setRefeshToken(w http.ResponseWriter, r *http.Request, tokens *application.
 		HttpOnly: true,
 		Secure:   secureFlag,
 		SameSite: http.SameSiteLaxMode,
-		Path:     "/auth",          // only sent to auth endpoint
+		Path:     "/",              // only sent to auth endpoint
 		MaxAge:   7 * 24 * 60 * 60, // 7 days in seconds
 	})
 }
