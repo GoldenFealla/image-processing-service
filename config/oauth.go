@@ -27,8 +27,8 @@ func loadGithubOAuthConfig() *oauth2.Config {
 		ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
 		RedirectURL:  os.Getenv("GITHUB_REDIRECT_URL"),
 		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/userinfo.profile",
+			"read:user",
+			"user:email",
 		},
 		Endpoint: github.Endpoint,
 	}

@@ -83,4 +83,5 @@ var (
 
 func InitializeOAuthRepository() {
 	GoogleOAuthRepository = createOAuth(loadGoogleOAuthConfig(), oauth.NewGoogleOAuthRepository)
+	GithubOAuthRepository = createOAuth(loadGithubOAuthConfig(), oauth.NewGithubOAuthRepository)
 }

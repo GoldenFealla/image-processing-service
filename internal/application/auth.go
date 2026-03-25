@@ -24,6 +24,8 @@ type AuthUseCase interface {
 
 	GetGoogleAuthURL(state string) string
 	HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, error)
+	GetGithubAuthURL(state string) string
+	HandleGithubCallback(ctx context.Context, code, state string) (*TokenPair, error)
 }
 
 type AuthServiceConfig struct {
@@ -32,6 +34,7 @@ type AuthServiceConfig struct {
 	domain.UserIdentityRepository
 	domain.SessionStore
 	GoogleOAuth domain.OAuthRepository
+	GithubOAuth domain.OAuthRepository
 }
 
 type AuthService struct {
@@ -40,6 +43,7 @@ type AuthService struct {
 	identities  domain.UserIdentityRepository
 	session     domain.SessionStore
 	googleOAuth domain.OAuthRepository
+	githubOAuth domain.OAuthRepository
 }
 
 func NewAuthService(cfg AuthServiceConfig) *AuthService {
@@ -49,6 +53,7 @@ func NewAuthService(cfg AuthServiceConfig) *AuthService {
 		identities:  cfg.UserIdentityRepository,
 		session:     cfg.SessionStore,
 		googleOAuth: cfg.GoogleOAuth,
+		githubOAuth: cfg.GithubOAuth,
 	}
 }
 
@@ -160,34 +165,33 @@ func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state stri
 		return nil, fmt.Errorf("failed to exchange code: %w", err)
 	}
 
-	identity, err := s.identities.FindByProvider(ctx, info.Provider, info.ProviderID)
-	if err != nil && !errors.Is(err, domain.ErrIdentityNotFound) {
-		return nil, fmt.Errorf("failed to find identity: %w", err)
+	user, err := s.linkUser(ctx, info)
+	if err != nil {
+		return nil, fmt.Errorf("failed to link user: %w", err)
 	}
 
-	var user *domain.User
-	if identity == nil {
-		user, err = s.users.FindByEmail(ctx, info.Email)
-		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
-			return nil, fmt.Errorf("failed to find: %w", err)
-		}
+	tokenPairs, err := s.issueTokens(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate token: %w", err)
+	}
 
-		user = &domain.User{
-			Email:    info.Email,
-			Username: info.Name,
-		}
+	return tokenPairs, nil
+}
 
-		if err = s.users.Create(ctx, user); err != nil {
-			return nil, fmt.Errorf("failed to create user: %w", err)
-		}
-		if err = s.identities.Create(ctx, user.ID, info.Provider, info.ProviderID); err != nil {
-			return nil, fmt.Errorf("failed to create identity: %w", err)
-		}
-	} else {
-		user, err = s.users.FindByID(ctx, identity.UserID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find user: %w", err)
-		}
+// === Github OAuth ===
+func (s *AuthService) GetGithubAuthURL(state string) string {
+	return s.githubOAuth.GetAuthURL(state)
+}
+
+func (s *AuthService) HandleGithubCallback(ctx context.Context, code, state string) (*TokenPair, error) {
+	info, err := s.githubOAuth.ExchangeCode(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+
+	user, err := s.linkUser(ctx, info)
+	if err != nil {
+		return nil, fmt.Errorf("failed to link user: %w", err)
 	}
 
 	tokenPairs, err := s.issueTokens(ctx, user.ID)
@@ -237,4 +241,51 @@ func (s *AuthService) generateRefreshToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func (s *AuthService) linkUser(ctx context.Context, info *domain.OAuthUserInfo) (*domain.User, error) {
+	identity, err := s.identities.FindByProvider(ctx, info.Provider, info.ProviderID)
+	if err != nil && !errors.Is(err, domain.ErrIdentityNotFound) {
+		return nil, fmt.Errorf("failed to find identity: %w", err)
+	}
+
+	var user *domain.User
+	if identity == nil {
+		user, err = s.findOrCreateUser(ctx, info)
+		if err != nil {
+			return nil, err
+		}
+
+		if err = s.identities.Create(ctx, user.ID, info.Provider, info.ProviderID); err != nil {
+			return nil, fmt.Errorf("failed to create identity: %w", err)
+		}
+	} else {
+		user, err = s.users.FindByID(ctx, identity.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find user: %w", err)
+		}
+	}
+
+	return user, nil
+}
+
+func (s *AuthService) findOrCreateUser(ctx context.Context, info *domain.OAuthUserInfo) (*domain.User, error) {
+	user, err := s.users.FindByEmail(ctx, info.Email)
+	if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+		return nil, fmt.Errorf("failed to find user: %w", err)
+	}
+
+	if user != nil {
+		return user, nil
+	}
+
+	user = &domain.User{
+		Email:    info.Email,
+		Username: info.Name,
+	}
+	if err = s.users.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return user, nil
 }

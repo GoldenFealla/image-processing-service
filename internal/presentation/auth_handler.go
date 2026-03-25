@@ -35,6 +35,9 @@ func (h *AuthHandler) Routes() http.Handler {
 	mux.HandleFunc("GET /google", h.googleRedirect)
 	mux.HandleFunc("GET /google/callback", h.googleCallback)
 
+	mux.HandleFunc("GET /github", h.githubRedirect)
+	mux.HandleFunc("GET /github/callback", h.githubCallback)
+
 	return mux
 }
 
@@ -142,6 +145,37 @@ func (h *AuthHandler) googleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokenPairs, err := h.auth.HandleGoogleCallback(r.Context(), r.URL.Query().Get("code"), state)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("auth failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	setRefeshToken(w, tokenPairs)
+	http.Redirect(w, r, h.RedirectURL, http.StatusFound)
+}
+
+// Google OAuth — redirect user to Google
+func (h *AuthHandler) githubRedirect(w http.ResponseWriter, r *http.Request) {
+	state := uuid.New().String()
+	h.oauthState.SaveState(r.Context(), state)
+	http.Redirect(w, r, h.auth.GetGithubAuthURL(state), http.StatusFound)
+}
+
+// Google OAuth — handle callback from Google
+func (h *AuthHandler) githubCallback(w http.ResponseWriter, r *http.Request) {
+	state := r.URL.Query().Get("state")
+	fmt.Println(state)
+	isValid, err := h.oauthState.ValidateState(r.Context(), state)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("auth failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if !isValid {
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
+
+	tokenPairs, err := h.auth.HandleGithubCallback(r.Context(), r.URL.Query().Get("code"), state)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("auth failed: %v", err), http.StatusInternalServerError)
 		return

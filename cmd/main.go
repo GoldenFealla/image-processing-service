@@ -47,6 +47,7 @@ func main() {
 		UserIdentityRepository: config.UserIdentityRepository,
 		SessionStore:           config.SessionStore,
 		GoogleOAuth:            config.GoogleOAuthRepository,
+		GithubOAuth:            config.GithubOAuthRepository,
 	})
 
 	// === presentation =====
