@@ -191,13 +191,11 @@ func isRequestSecure(r *http.Request) bool {
 }
 
 func clearRefreshToken(w http.ResponseWriter, r *http.Request) {
-	secureFlag := isRequestSecure(r)
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
 		HttpOnly: true,
-		Secure:   secureFlag,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
@@ -206,14 +204,11 @@ func clearRefreshToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func setRefeshToken(w http.ResponseWriter, r *http.Request, tokens *application.TokenPair) {
-	secureFlag := isRequestSecure(r)
-	fmt.Printf("DEBUG secureFlag: %v\n", secureFlag)
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    tokens.RefreshToken,
 		HttpOnly: true,
-		Secure:   secureFlag,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",              // only sent to auth endpoint
 		MaxAge:   7 * 24 * 60 * 60, // 7 days in seconds
