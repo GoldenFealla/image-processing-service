@@ -1,82 +1,61 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/x509"
-	"encoding/pem"
 	"log"
 	"net/http"
 	"os"
-	"time"
-
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 
+	"github.com/GoldenFealla/image-processing-service/config"
 	"github.com/GoldenFealla/image-processing-service/internal/application"
 	"github.com/GoldenFealla/image-processing-service/internal/infrastructure"
-	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/oauth"
-	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/pg"
-	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/valkey"
 	"github.com/GoldenFealla/image-processing-service/internal/middleware"
 	"github.com/GoldenFealla/image-processing-service/internal/presentation"
 )
 
-var (
-	ImageCacheDB   int = 0
-	SessionStoreDB int = 1
-	OAuthStateDB   int = 1
-)
-
-func main() {
+func init() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file, ignored")
 	}
 
+	// When want to change Tech, just implement those interface in domain
+	// And Initialize the tech
+	config.InitializePostgres()
+	config.InitializeStore()
+	config.InitializeSigningKey()
+	config.InitializeR2()
+	config.InitializeOAuthRepository()
+}
+
+func main() {
 	mainMux := http.NewServeMux()
-
-	metadataRepo, err := pg.NewPostgresImageRepository(loadPostgresConfig())
-	if err != nil {
-		log.Fatalf("failed to initialize image metadata repository: %v", err)
-	}
-	defer metadataRepo.Close()
-	storageRepo, err := infrastructure.NewR2Storage(loadR2Config())
-	if err != nil {
-		log.Fatalf("failed to initialize R2 storage: %v", err)
-	}
-	userRepo, err := pg.NewPostgresUserRepository(loadPostgresConfig())
-	if err != nil {
-		log.Fatalf("failed to initialize user repository: %v", err)
-	}
-	userIdentityRepo, err := pg.NewPostgresUserIdentityRepository(loadPostgresConfig())
-	if err != nil {
-		log.Fatalf("failed to initialize user repository: %v", err)
-	}
-	googleOAuthRepo := oauth.NewGoogleOAuthRepository(loadGoogleOAuthConfig())
-
-	imageCache, err := valkey.NewImageCache(loadCacheConfig(ImageCacheDB))
-	if err != nil {
-		log.Fatalf("failed to initialize image cache: %v", err)
-	}
-	sessionStore, err := valkey.NewSessionStore(loadCacheConfig(SessionStoreDB))
-	if err != nil {
-		log.Fatalf("failed to initialize session store: %v", err)
-	}
-	oauthState, err := valkey.NewAuthStateStore(loadOAuthConfig(OAuthStateDB))
-	if err != nil {
-		log.Fatalf("failed to initialize oauth state: %v", err)
-	}
 
 	imageProcessor := infrastructure.NewVipsImageProcessor()
 
-	processUseCase := application.NewProcessImageService(metadataRepo, storageRepo, imageProcessor, imageCache)
-	authUseCase := application.NewAuthService(userRepo, userIdentityRepo, sessionStore, loadAuthConfig(), googleOAuthRepo)
+	// === service ==========
+	processService := application.NewProcessImageService(
+		config.ImageMetadataRepository,
+		config.ImageStorageRepository,
+		imageProcessor,
+		config.ImageStore,
+	)
+	authService := application.NewAuthService(application.AuthServiceConfig{
+		JWTSigningKeyConfig:    config.JWTSigningKeyConfig,
+		UserRepository:         config.UserRepository,
+		UserIdentityRepository: config.UserIdentityRepository,
+		SessionStore:           config.SessionStore,
+		GoogleOAuth:            config.GoogleOAuthRepository,
+	})
 
 	// === presentation =====
-	imageHandler := presentation.NewImageHandler(processUseCase)
-	userHandler := presentation.NewAuthHandler(authUseCase, oauthState, os.Getenv("REDIRECT_URL"))
+	imageHandler := presentation.NewImageHandler(processService)
+	userHandler := presentation.NewAuthHandler(
+		authService,
+		config.OAuthStateStore,
+		os.Getenv("REDIRECT_URL"),
+	)
 
 	handler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:4200"},
@@ -87,7 +66,7 @@ func main() {
 
 	mainMux.Handle("/images/", middleware.Chain(
 		http.StripPrefix("/images", imageHandler.Routes()),
-		middleware.JWTMiddleware(authUseCase),
+		middleware.JWTMiddleware(authService),
 	))
 
 	mainMux.Handle("/auth/", http.StripPrefix("/auth", userHandler.Routes()))
@@ -100,92 +79,4 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
-}
-
-// Storage and Memory
-func loadR2Config() *infrastructure.R2StorageConfig {
-	return &infrastructure.R2StorageConfig{
-		AccountID:       os.Getenv("R2_ACCOUNT_ID"),
-		AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
-		AccessKeySecret: os.Getenv("R2_SECRET_ACCESS_KEY"),
-		Bucket:          os.Getenv("R2_BUCKET"),
-		PublicURL:       os.Getenv("R2_PUBLIC_URL"),
-	}
-}
-
-func loadPostgresConfig() *pg.PostgresConfig {
-	return &pg.PostgresConfig{
-		Host:     os.Getenv("DB_HOST"),
-		Port:     os.Getenv("DB_PORT"),
-		User:     os.Getenv("DB_USER"),
-		Password: os.Getenv("DB_PASSWORD"),
-		DBName:   os.Getenv("DB_NAME"),
-	}
-}
-
-func loadCacheConfig(DB int) valkey.ValkeyConfig {
-	return valkey.ValkeyConfig{
-		Addr:     os.Getenv("VALKEY_ADDR"),
-		Password: os.Getenv("VALKEY_PASSWORD"),
-		DB:       DB,
-		TTL:      30 * time.Minute,
-	}
-}
-
-func loadOAuthConfig(DB int) valkey.ValkeyConfig {
-	return valkey.ValkeyConfig{
-		Addr:     os.Getenv("VALKEY_ADDR"),
-		Password: os.Getenv("VALKEY_PASSWORD"),
-		DB:       DB,
-		TTL:      30 * time.Minute,
-	}
-}
-
-// Auth
-func loadAuthConfig() application.AuthConfig {
-	privateKey, _ := loadECPrivateKey("ec256_private.pem")
-	publicKey, _ := loadECPublicKey("ec256_public.pem")
-
-	return application.AuthConfig{
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:  5 * time.Minute,
-		RefreshTokenTTL: 7 * 24 * time.Hour,
-		PrivateKey:      privateKey,
-		PublicKey:       publicKey,
-	}
-}
-
-func loadGoogleOAuthConfig() *oauth2.Config {
-	return &oauth2.Config{
-		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
-		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/userinfo.profile",
-		},
-		Endpoint: google.Endpoint,
-	}
-}
-
-func loadECPrivateKey(path string) (*ecdsa.PrivateKey, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(data)
-	return x509.ParseECPrivateKey(block.Bytes)
-}
-
-func loadECPublicKey(path string) (*ecdsa.PublicKey, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(data)
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	return pub.(*ecdsa.PublicKey), nil
 }

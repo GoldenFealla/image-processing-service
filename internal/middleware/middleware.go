@@ -26,7 +26,7 @@ func LoggerMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func JWTMiddleware(authUseCase *application.AuthService) func(http.Handler) http.Handler {
+func JWTMiddleware(authService *application.AuthService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -36,7 +36,7 @@ func JWTMiddleware(authUseCase *application.AuthService) func(http.Handler) http
 			}
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
-			userID, err := authUseCase.ValidateAccessToken(token)
+			userID, err := authService.ValidateAccessToken(token)
 			if err != nil {
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return

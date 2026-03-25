@@ -30,7 +30,7 @@ type ProcessImageUseCase interface {
 }
 
 type ProcessImageService struct {
-	cache     domain.ImageCache
+	cache     domain.ImageStore
 	metadata  domain.ImageMetadataRepository
 	storage   domain.ImageStorageRepository
 	processor domain.ImageProcessor
@@ -40,7 +40,7 @@ func NewProcessImageService(
 	metadata domain.ImageMetadataRepository,
 	storage domain.ImageStorageRepository,
 	processor domain.ImageProcessor,
-	cache domain.ImageCache,
+	cache domain.ImageStore,
 ) *ProcessImageService {
 	return &ProcessImageService{
 		metadata:  metadata,

@@ -1,7 +1,6 @@
 package presentation
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,16 +14,11 @@ import (
 type AuthHandler struct {
 	auth application.AuthUseCase
 
-	oauthState  OAuthStateRepository
+	oauthState  domain.OAuthStateStore
 	RedirectURL string
 }
 
-type OAuthStateRepository interface {
-	SaveState(ctx context.Context, state string) error
-	ValidateState(ctx context.Context, state string) (bool, error)
-}
-
-func NewAuthHandler(auth application.AuthUseCase, oauthState OAuthStateRepository, RedirectURL string) *AuthHandler {
+func NewAuthHandler(auth application.AuthUseCase, oauthState domain.OAuthStateStore, RedirectURL string) *AuthHandler {
 	return &AuthHandler{auth: auth, oauthState: oauthState, RedirectURL: RedirectURL}
 }
 

@@ -10,11 +10,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type SessionStore struct {
+type ValkeySessionStore struct {
 	client *redis.Client
 }
 
-func NewSessionStore(cfg ValkeyConfig) (*SessionStore, error) {
+func NewValkeySessionStore(cfg ValkeyConfig) (*ValkeySessionStore, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
@@ -25,14 +25,14 @@ func NewSessionStore(cfg ValkeyConfig) (*SessionStore, error) {
 		return nil, fmt.Errorf("failed to connect to session store: %w", err)
 	}
 
-	return &SessionStore{client: client}, nil
+	return &ValkeySessionStore{client: client}, nil
 }
 
-func (s *SessionStore) Close() {
+func (s *ValkeySessionStore) Close() {
 	s.client.Close()
 }
 
-func (s *SessionStore) SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiry time.Time) error {
+func (s *ValkeySessionStore) SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiry time.Time) error {
 	ttl := time.Until(expiry)
 	err := s.client.Set(ctx, refreshKey(token), userID.String(), ttl).Err()
 	if err != nil {
@@ -41,7 +41,7 @@ func (s *SessionStore) SaveRefreshToken(ctx context.Context, userID uuid.UUID, t
 	return nil
 }
 
-func (s *SessionStore) IsRefreshTokenValid(ctx context.Context, token string) (uuid.UUID, error) {
+func (s *ValkeySessionStore) IsRefreshTokenValid(ctx context.Context, token string) (uuid.UUID, error) {
 	val, err := s.client.Get(ctx, refreshKey(token)).Result()
 	if errors.Is(err, redis.Nil) {
 		return uuid.Nil, errors.New("refresh token not found or expired")
@@ -58,7 +58,7 @@ func (s *SessionStore) IsRefreshTokenValid(ctx context.Context, token string) (u
 	return userID, nil
 }
 
-func (s *SessionStore) RevokeRefreshToken(ctx context.Context, token string) error {
+func (s *ValkeySessionStore) RevokeRefreshToken(ctx context.Context, token string) error {
 	err := s.client.Del(ctx, refreshKey(token)).Err()
 	if err != nil {
 		return fmt.Errorf("failed to revoke refresh token: %w", err)

@@ -9,11 +9,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type AuthStateStore struct {
+type ValkeyOAuthStateStore struct {
 	client *redis.Client
 }
 
-func NewAuthStateStore(cfg ValkeyConfig) (*AuthStateStore, error) {
+func NewValkeyOAuthStateStore(cfg ValkeyConfig) (*ValkeyOAuthStateStore, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
@@ -24,10 +24,10 @@ func NewAuthStateStore(cfg ValkeyConfig) (*AuthStateStore, error) {
 		return nil, fmt.Errorf("failed to connect to session store: %w", err)
 	}
 
-	return &AuthStateStore{client: client}, nil
+	return &ValkeyOAuthStateStore{client: client}, nil
 }
 
-func (s *AuthStateStore) SaveState(ctx context.Context, state string) error {
+func (s *ValkeyOAuthStateStore) SaveState(ctx context.Context, state string) error {
 	err := s.client.Set(ctx, stateKey(state), "1", 10*time.Minute).Err()
 	if err != nil {
 		return fmt.Errorf("failed to save oauth state: %w", err)
@@ -35,7 +35,7 @@ func (s *AuthStateStore) SaveState(ctx context.Context, state string) error {
 	return nil
 }
 
-func (s *AuthStateStore) ValidateState(ctx context.Context, state string) (bool, error) {
+func (s *ValkeyOAuthStateStore) ValidateState(ctx context.Context, state string) (bool, error) {
 	deleted, err := s.client.Del(ctx, stateKey(state)).Result()
 	if errors.Is(err, redis.Nil) {
 		return false, nil

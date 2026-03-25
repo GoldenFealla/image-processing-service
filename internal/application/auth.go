@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -16,33 +15,6 @@ import (
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
 )
 
-type UserRepository interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
-	FindByEmail(ctx context.Context, email string) (*domain.User, error)
-	FindByUsernameOrEmail(ctx context.Context, usernameOrEmail string) (*domain.User, error)
-	Create(ctx context.Context, user *domain.User) error
-}
-
-type UserIdentityRepository interface {
-	Create(ctx context.Context, userID uuid.UUID, Provider string, ProviderID string) error
-	FindByProvider(ctx context.Context, Provider string, ProviderID string) (*domain.UserIdentity, error)
-}
-
-type SessionRepository interface {
-	IsRefreshTokenValid(ctx context.Context, token string) (uuid.UUID, error)
-	SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiry time.Time) error
-	RevokeRefreshToken(ctx context.Context, token string) error
-}
-
-type AuthConfig struct {
-	JWTSecret       string
-	AccessTokenTTL  time.Duration // 15 min
-	RefreshTokenTTL time.Duration // 7 days
-
-	PublicKey  *ecdsa.PublicKey
-	PrivateKey *ecdsa.PrivateKey
-}
-
 type AuthUseCase interface {
 	Login(ctx context.Context, form *domain.LoginForm) (*TokenPair, error)
 	Logout(ctx context.Context, refreshToken string) error
@@ -54,27 +26,29 @@ type AuthUseCase interface {
 	HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, error)
 }
 
-type AuthService struct {
-	users      UserRepository
-	identities UserIdentityRepository
-	session    SessionRepository
-	config     AuthConfig
-	oauth      domain.OAuthRepository
+type AuthServiceConfig struct {
+	domain.JWTSigningKeyConfig
+	domain.UserRepository
+	domain.UserIdentityRepository
+	domain.SessionStore
+	GoogleOAuth domain.OAuthRepository
 }
 
-func NewAuthService(
-	users UserRepository,
-	identities UserIdentityRepository,
-	session SessionRepository,
-	config AuthConfig,
-	oauth domain.OAuthRepository,
-) *AuthService {
+type AuthService struct {
+	config      domain.JWTSigningKeyConfig
+	users       domain.UserRepository
+	identities  domain.UserIdentityRepository
+	session     domain.SessionStore
+	googleOAuth domain.OAuthRepository
+}
+
+func NewAuthService(cfg AuthServiceConfig) *AuthService {
 	return &AuthService{
-		users:      users,
-		identities: identities,
-		session:    session,
-		config:     config,
-		oauth:      oauth,
+		config:      cfg.JWTSigningKeyConfig,
+		users:       cfg.UserRepository,
+		identities:  cfg.UserIdentityRepository,
+		session:     cfg.SessionStore,
+		googleOAuth: cfg.GoogleOAuth,
 	}
 }
 
@@ -177,11 +151,11 @@ func (s *AuthService) ValidateAccessToken(tokenStr string) (uuid.UUID, error) {
 
 // === Google OAuth ===
 func (s *AuthService) GetGoogleAuthURL(state string) string {
-	return s.oauth.GetAuthURL(state)
+	return s.googleOAuth.GetAuthURL(state)
 }
 
 func (s *AuthService) HandleGoogleCallback(ctx context.Context, code, state string) (*TokenPair, error) {
-	info, err := s.oauth.ExchangeCode(ctx, code)
+	info, err := s.googleOAuth.ExchangeCode(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code: %w", err)
 	}
