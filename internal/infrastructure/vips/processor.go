@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"log"
 
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
 	"github.com/cshum/vipsgen/vips"
@@ -198,7 +199,6 @@ func (v *VipsImageProcessor) mirror(enabled bool) func(*vips.Image) error {
 
 func (v *VipsImageProcessor) filters(filters []domain.FilterOptions) func(*vips.Image) (*vips.Image, error) {
 	return func(img *vips.Image) (*vips.Image, error) {
-
 		current := img
 		var err error
 
@@ -227,6 +227,7 @@ func (v *VipsImageProcessor) filters(filters []domain.FilterOptions) func(*vips.
 			}
 
 			if err != nil {
+				log.Printf("error applying filter %v: err: %v", f, err)
 				return nil, err
 			}
 		}

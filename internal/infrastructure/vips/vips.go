@@ -35,15 +35,33 @@ func blendImages(base, overlay *vips.Image, t float64) (*vips.Image, error) {
 	return b, nil
 }
 
+func normalize(img *vips.Image) error {
+	if img.HasAlpha() {
+		if err := img.Flatten(nil); err != nil {
+			return err
+		}
+	}
+
+	if img.Bands() != 3 {
+		if err := img.Colourspace(vips.InterpretationSrgb, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func applyWithIntensity(
 	img *vips.Image,
 	intensity float64,
 	full func(*vips.Image) error,
 ) (*vips.Image, error) {
-
 	if intensity <= 0 {
 		return img, nil
 	}
+
+	// Normalize before process to fix 3 bands
+	normalize(img)
 
 	if intensity >= 1 {
 		return img, full(img)
