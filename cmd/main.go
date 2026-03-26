@@ -10,7 +10,7 @@ import (
 
 	"github.com/GoldenFealla/image-processing-service/config"
 	"github.com/GoldenFealla/image-processing-service/internal/application"
-	"github.com/GoldenFealla/image-processing-service/internal/infrastructure"
+	"github.com/GoldenFealla/image-processing-service/internal/infrastructure/vips"
 	"github.com/GoldenFealla/image-processing-service/internal/middleware"
 	"github.com/GoldenFealla/image-processing-service/internal/presentation"
 )
@@ -32,7 +32,7 @@ func init() {
 func main() {
 	mainMux := http.NewServeMux()
 
-	imageProcessor := infrastructure.NewVipsImageProcessor()
+	imageProcessor := vips.NewVipsImageProcessor()
 
 	// === service ==========
 	processService := application.NewProcessImageService(

@@ -1,12 +1,9 @@
-package infrastructure
+package vips
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"html"
-	"io"
-	"strconv"
 
 	"github.com/GoldenFealla/image-processing-service/internal/domain"
 	"github.com/cshum/vipsgen/vips"
@@ -201,31 +198,32 @@ func (v *VipsImageProcessor) mirror(enabled bool) func(*vips.Image) error {
 
 func (v *VipsImageProcessor) filters(filters []domain.FilterOptions) func(*vips.Image) (*vips.Image, error) {
 	return func(img *vips.Image) (*vips.Image, error) {
+
 		current := img
 		var err error
 
 		for _, f := range filters {
+			if f.Intensity <= 0 {
+				continue
+			}
+
+			intensity := min(1, f.Intensity)
+
 			switch f.Name {
 			case domain.FilterGrayscale:
-				current, err = applyGrayscale(current, f.Intensity)
-
+				current, err = applyGrayscale(current, intensity)
 			case domain.FilterSepia:
-				current, err = applySepia(current, f.Intensity)
-
+				current, err = applySepia(current, intensity)
 			case domain.FilterVivid:
-				current, err = applyVivid(current, f.Intensity)
-
+				current, err = applyVivid(current, intensity)
 			case domain.FilterDystopian:
-				current, err = applyDystopian(current, f.Intensity)
-
+				current, err = applyDystopian(current, intensity)
 			case domain.FilterFilm:
-				current, err = applyFilm(current, f.Intensity)
-
+				current, err = applyFilm(current, intensity)
 			case domain.FilterWild:
-				current, err = applyWild(current, f.Intensity)
-
+				current, err = applyWild(current, intensity)
 			case domain.FilterNoir:
-				current, err = applyNoir(current, f.Intensity)
+				current, err = applyNoir(current, intensity)
 			}
 
 			if err != nil {
@@ -270,234 +268,3 @@ func (v *VipsImageProcessor) watermark(opts *domain.WatermarkOptions) func(*vips
 }
 
 // ========= helper =========
-func matrixImageFromArray(arr []float64, size int) (*vips.Image, error) {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%d %d\n", size, size)
-
-	for i, v := range arr {
-		if i%size == 0 && i != 0 {
-			buf.WriteString("\n")
-		} else if i%size != 0 {
-			buf.WriteString(" ")
-		}
-		buf.WriteString(strconv.FormatFloat(v, 'f', 4, 64))
-	}
-	buf.WriteString("\n")
-
-	source := vips.NewSource(io.NopCloser(&buf))
-	return vips.NewMatrixloadSource(source, vips.DefaultMatrixloadSourceOptions())
-}
-
-func blendImages(base, overlay *vips.Image, t float64) (*vips.Image, error) {
-	if t <= 0 {
-		return base.Copy(nil)
-	}
-	if t >= 1 {
-		return overlay.Copy(nil)
-	}
-
-	b, _ := base.Copy(nil)
-	o, _ := overlay.Copy(nil)
-
-	// base * (1 - t)
-	if err := b.Linear([]float64{1 - t}, []float64{0}, nil); err != nil {
-		return nil, err
-	}
-
-	// overlay * t
-	if err := o.Linear([]float64{t}, []float64{0}, nil); err != nil {
-		return nil, err
-	}
-
-	// add
-	if err := b.Add(o); err != nil {
-		return nil, err
-	}
-
-	return b, nil
-}
-
-func applyGrayscale(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	gray, _ := img.Copy(nil)
-
-	if err := gray.Colourspace(vips.InterpretationBW, nil); err != nil {
-		return nil, err
-	}
-	if err := gray.Colourspace(vips.InterpretationSrgb, nil); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, gray, intensity)
-}
-
-var sepiaMatrix = []float64{
-	0.3588, 0.7044, 0.1368,
-	0.2990, 0.5870, 0.1140,
-	0.2392, 0.4696, 0.0912,
-}
-
-func applySepia(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	sepia, _ := img.Copy(nil)
-
-	m, err := matrixImageFromArray(sepiaMatrix, 3)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := sepia.Recomb(m); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, sepia, intensity)
-}
-
-func applyVivid(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	out, _ := img.Copy(nil)
-
-	if err := out.Linear(
-		[]float64{1 + 0.2*intensity},
-		[]float64{-10 * intensity},
-		nil,
-	); err != nil {
-		return nil, err
-	}
-
-	matrix := []float64{
-		1.2, 0, 0,
-		0, 1.2, 0,
-		0, 0, 1.2,
-	}
-
-	m, _ := matrixImageFromArray(matrix, 3)
-	if err := out.Recomb(m); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, out, intensity)
-}
-
-func applyDystopian(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	out, _ := img.Copy(nil)
-
-	matrix := []float64{
-		0.8, 0.1, 0.1,
-		0.0, 1.0, 0.0,
-		0.1, 0.1, 0.9,
-	}
-
-	m, _ := matrixImageFromArray(matrix, 3)
-	if err := out.Recomb(m); err != nil {
-		return nil, err
-	}
-
-	if err := out.Linear(
-		[]float64{1 - 0.1*intensity},
-		[]float64{-20 * intensity},
-		nil,
-	); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, out, intensity)
-}
-
-func applyFilm(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	out, _ := img.Copy(nil)
-
-	if err := out.Linear(
-		[]float64{1 - 0.1*intensity},
-		[]float64{10 * intensity},
-		nil,
-	); err != nil {
-		return nil, err
-	}
-
-	matrix := []float64{
-		1.1, 0.05, 0,
-		0.05, 1.0, 0,
-		0, 0.05, 0.9,
-	}
-
-	m, _ := matrixImageFromArray(matrix, 3)
-	if err := out.Recomb(m); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, out, intensity)
-}
-
-func applyWild(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	out, _ := img.Copy(nil)
-
-	if err := out.Linear(
-		[]float64{1 + 0.4*intensity},
-		[]float64{-15 * intensity},
-		nil,
-	); err != nil {
-		return nil, err
-	}
-
-	matrix := []float64{
-		1.5, 0, 0,
-		0, 1.5, 0,
-		0, 0, 1.5,
-	}
-
-	m, _ := matrixImageFromArray(matrix, 3)
-	if err := out.Recomb(m); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, out, intensity)
-}
-
-func applyNoir(img *vips.Image, intensity float64) (*vips.Image, error) {
-	if intensity <= 0 {
-		return img.Copy(nil)
-	}
-
-	base, _ := img.Copy(nil)
-	out, _ := img.Copy(nil)
-
-	if err := out.Colourspace(vips.InterpretationBW, nil); err != nil {
-		return nil, err
-	}
-	if err := out.Linear([]float64{1.3}, []float64{-20}, nil); err != nil {
-		return nil, err
-	}
-	if err := out.Colourspace(vips.InterpretationSrgb, nil); err != nil {
-		return nil, err
-	}
-
-	return blendImages(base, out, intensity)
-}
