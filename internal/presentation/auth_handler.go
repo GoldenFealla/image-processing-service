@@ -185,9 +185,9 @@ func (h *AuthHandler) githubCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.RedirectURL, http.StatusFound)
 }
 
-func isRequestSecure(r *http.Request) bool {
-	// Check if the protocol is https or if Cloudflare/Nginx sent the header
-	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+func isHttps(r *http.Request) bool {
+	// Go is behind nginx
+	return r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 func clearRefreshToken(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +195,7 @@ func clearRefreshToken(w http.ResponseWriter, r *http.Request) {
 		Name:     "refresh_token",
 		Value:    "",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   isHttps(r),
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
@@ -208,7 +208,7 @@ func setRefeshToken(w http.ResponseWriter, r *http.Request, tokens *application.
 		Name:     "refresh_token",
 		Value:    tokens.RefreshToken,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   isHttps(r),
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",              // only sent to auth endpoint
 		MaxAge:   7 * 24 * 60 * 60, // 7 days in seconds
