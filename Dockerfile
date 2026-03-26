@@ -22,7 +22,9 @@ RUN apk add --no-cache \
     librsvg-dev \
     giflib-dev \
     libheif-dev \
-    imagemagick-dev
+    imagemagick-dev \
+    pango-dev \
+    fontconfig-dev
 
 # Build libvips
 RUN curl -L https://github.com/libvips/libvips/releases/download/v8.18.0/vips-8.18.0.tar.xz -o vips.tar.xz \
@@ -67,7 +69,10 @@ RUN apk add --no-cache \
     libheif \
     imagemagick \
     ca-certificates \
-    tzdata
+    tzdata \
+    pango \
+    fontconfig \
+    font-dejavu
 
 # Copy libvips
 COPY --from=builder /usr/lib/libvips* /usr/lib/
