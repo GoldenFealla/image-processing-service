@@ -31,6 +31,7 @@ type ImageMetadataRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*Image, error)
 	FindListByOwnerID(ctx context.Context, userID uuid.UUID) ([]*Image, error)
 	Update(ctx context.Context, image *Image) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type ImageStorageRepository interface {

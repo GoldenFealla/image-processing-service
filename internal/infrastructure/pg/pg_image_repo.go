@@ -90,6 +90,20 @@ func (pir *PostgresImageRepository) Save(ctx context.Context, image *domain.Imag
 	return nil
 }
 
+func (pir *PostgresImageRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	result, err := pir.db.Exec(ctx,
+		`DELETE FROM images WHERE id = $1`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete image: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return domain.ErrImageNotFound
+	}
+	return nil
+}
+
 func (pir *PostgresImageRepository) Close() {
 	pir.db.Close()
 }

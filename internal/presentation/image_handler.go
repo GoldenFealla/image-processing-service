@@ -34,6 +34,7 @@ func (h *ImageHandler) Routes() *http.ServeMux {
 	r.HandleFunc("POST /", h.upload)
 	r.HandleFunc("POST /{id}/transform", h.transform)
 	r.HandleFunc("PUT /{id}/save", h.save)
+	r.HandleFunc("DELETE /{id}", h.delete)
 
 	return r
 }
@@ -198,4 +199,35 @@ func (h *ImageHandler) save(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(image)
+}
+
+func (h *ImageHandler) delete(w http.ResponseWriter, r *http.Request) {
+	rawID := r.PathValue("id")
+	id, err := uuid.Parse(rawID)
+	if err != nil {
+		http.Error(w, "invalid image id", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
+
+	err = h.imageUsecase.Delete(r.Context(), userID, id)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
+			http.Error(w, "forbidden", http.StatusForbidden)
+		case errors.Is(err, domain.ErrImageNotFound):
+			http.Error(w, "image not found", http.StatusNotFound)
+		default:
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 }

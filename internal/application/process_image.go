@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 
@@ -25,6 +26,7 @@ type ProcessImageUseCase interface {
 	Retrieve(ctx context.Context, userID, id uuid.UUID) (*domain.Image, error)
 	List(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error)
 	Upload(ctx context.Context, userID uuid.UUID, file multipart.File, name string) (*domain.Image, error)
+	Delete(ctx context.Context, userID, id uuid.UUID) error
 	Save(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) (*domain.Image, error)
 	Transform(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) ([]byte, error)
 }
@@ -126,6 +128,24 @@ func (pis *ProcessImageService) Upload(ctx context.Context, userID uuid.UUID, fi
 	}
 
 	return newImage, nil
+}
+
+func (pis *ProcessImageService) Delete(ctx context.Context, userID, id uuid.UUID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	err := pis.metadata.Delete(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		if err := pis.storage.Delete(context.WithoutCancel(ctx), userID, id); err != nil {
+			log.Println("failed to delete image from storage", "error", err, "id", id)
+		}
+	}()
+	return nil
 }
 
 func (pis *ProcessImageService) Save(ctx context.Context, userID, id uuid.UUID, opts domain.TransformOptions) (*domain.Image, error) {
