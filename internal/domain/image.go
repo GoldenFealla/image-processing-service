@@ -46,7 +46,6 @@ type ImageProcessor interface {
 }
 
 type Format string
-type Filter string
 
 const (
 	FormatJPEG Format = "jpeg"
@@ -55,8 +54,13 @@ const (
 )
 
 const (
-	FilterGrayscale Filter = "grayscale"
-	FilterSepia     Filter = "sepia"
+	FilterGrayscale = "grayscale"
+	FilterSepia     = "sepia"
+	FilterVivid     = "vivid"
+	FilterDystopian = "dystopian"
+	FilterFilm      = "film"
+	FilterWild      = "wild"
+	FilterNoir      = "noir"
 )
 
 type ResizeOptions struct {
@@ -88,6 +92,11 @@ type CompressOptions struct {
 	Quality int `json:"quality"` // 1 - 100
 }
 
+type FilterOptions struct {
+	Name      string  `json:"name"`
+	Intensity float64 `json:"intensity"`
+}
+
 type TransformOptions struct {
 	Resize    *ResizeOptions    `json:"resize,omitempty"`
 	Crop      *CropOptions      `json:"crop,omitempty"`
@@ -97,5 +106,5 @@ type TransformOptions struct {
 	Flip      bool              `json:"flip,omitempty"`   // vertical
 	Mirror    bool              `json:"mirror,omitempty"` // horizontal
 	Format    *Format           `json:"format,omitempty"`
-	Filters   []Filter          `json:"filters,omitempty"`
+	Filters   []FilterOptions   `json:"filters,omitempty"`
 }
